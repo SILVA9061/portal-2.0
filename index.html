@@ -5,29 +5,44 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Portal OPPO - Premium</title>
+
+<!-- CONFIGURAÇÕES DE PWA (APP TELA CHEIA) -->
 <link rel="manifest" href="manifest.json">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Portal OPPO">
 <meta name="theme-color" content="#0f172a">
+
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
 <script src="https://unpkg.com/lucide@latest"></script>
+
 <style>
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.2); border-radius: 10px; }
 body.dark-mode ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2); }
 ::-webkit-scrollbar-thumb:hover { background: var(--primary); }
-:root { --bg-fundo: #f1f5f9; --bg-container: rgba(255, 255, 255, 0.95); --bg-card: rgba(255, 255, 255, 0.85); --bg-item: rgba(255, 255, 255, 0.95); --cor-texto: #0f172a; --cor-secundaria: #475569; --border-color: rgba(0, 0, 0, 0.12); --bg-input: #ffffff; --shadow-color: rgba(0, 0, 0, 0.08); --primary: #0086ff; --primary-gradiente: linear-gradient(135deg, #0086ff 0%, #005bb5 100%); --glass-blur: blur(20px); }
-body.dark-mode { --bg-fundo: #0f172a; --bg-container: rgba(30, 41, 59, 0.9); --bg-card: rgba(30, 41, 59, 0.8); --bg-item: rgba(15, 23, 42, 0.85); --cor-texto: #f8fafc; --cor-secundaria: #94a3b8; --border-color: rgba(255, 255, 255, 0.15); --bg-input: #1e293b; --shadow-color: rgba(0, 0, 0, 0.4); --primary: #3b82f6; --primary-gradiente: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); }
+
+:root {
+    --bg-fundo: #f1f5f9; --bg-container: rgba(255, 255, 255, 0.95); --bg-card: rgba(255, 255, 255, 0.85); 
+    --bg-item: rgba(255, 255, 255, 0.95); --cor-texto: #0f172a; --cor-secundaria: #475569;
+    --border-color: rgba(0, 0, 0, 0.12); --bg-input: #ffffff; --shadow-color: rgba(0, 0, 0, 0.08);
+    --primary: #0086ff; --primary-gradiente: linear-gradient(135deg, #0086ff 0%, #005bb5 100%); --glass-blur: blur(20px);
+}
+body.dark-mode {
+    --bg-fundo: #0f172a; --bg-container: rgba(30, 41, 59, 0.9); --bg-card: rgba(30, 41, 59, 0.8); 
+    --bg-item: rgba(15, 23, 42, 0.85); --cor-texto: #f8fafc; --cor-secundaria: #94a3b8;
+    --border-color: rgba(255, 255, 255, 0.15); --bg-input: #1e293b; --shadow-color: rgba(0, 0, 0, 0.4);
+    --primary: #3b82f6; --primary-gradiente: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+}
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 0 0 100px 0; text-align: center; background-color: var(--bg-fundo); color: var(--cor-texto); transition: background-color 0.3s ease; margin: 0; min-height: 100vh; }
 @keyframes spin { 100% { transform: rotate(360deg); } }
-.container { max-width: 480px; margin: 0 auto; background: var(--bg-container); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur); padding: 0 25px 30px 25px; border-radius: 0 0 24px 24px; border: 1px solid var(--border-color); box-shadow: 0 20px 40px var(--shadow-color); transition: max-width 0.4s cubic-bezier(0.25, 0.8, 0.25, 1); position: relative; min-height: 100vh; }
+.container { max-width: 480px; margin: 0 auto; background: var(--bg-container); backdrop-filter: var(--glass-blur); padding: 0 25px 30px 25px; border-radius: 0 0 24px 24px; border: 1px solid var(--border-color); box-shadow: 0 20px 40px var(--shadow-color); min-height: 100vh; }
 .container-wide { max-width: 1000px !important; }
-.header-global { position: sticky; top: 0; background: var(--bg-container); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur); z-index: 1000; display: none; justify-content: space-between; align-items: center; padding: 15px 25px; margin: 0 -25px 25px -25px; border-bottom: 1px solid var(--border-color); }
+.header-global { position: sticky; top: 0; background: var(--bg-container); backdrop-filter: var(--glass-blur); z-index: 1000; display: none; justify-content: space-between; align-items: center; padding: 15px 25px; margin: 0 -25px 25px -25px; border-bottom: 1px solid var(--border-color); }
 .header-user-info { display: flex; align-items: center; gap: 12px; }
 .header-avatar { width: 40px; height: 40px; border-radius: 12px; background: var(--primary-gradiente); color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 16px; box-shadow: 0 4px 10px rgba(0,134,255,0.3);}
 .header-actions { display: flex; align-items: center; gap: 12px; }
@@ -38,43 +53,113 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .btn-save-memory:active { transform: translateY(1px); }
 .btn-back-nav { display: flex; align-items: center; gap: 10px; background: none; border: none; color: var(--cor-texto); cursor: pointer; padding: 0; font-size: 18px; font-weight: 700; transition: transform 0.2s;}
 .btn-back-nav:active { transform: translateX(-5px); }
+
 h2 { margin-bottom: 5px; color: var(--cor-texto); font-weight: 800; letter-spacing: -0.5px; }
 h3 { margin-top: 0; color: var(--primary); font-size: 15px; margin-bottom: 25px; font-weight: 600; }
 h4 { color: var(--cor-texto) !important; font-weight: 700; margin-top: 0; }
 .tela { display: none; animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
 .tela.ativa { display: block; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+/* SKELETON LOADERS */
 .skeleton-card { background: var(--bg-card); padding: 16px; border-radius: 16px; margin-bottom: 12px; border: 1px solid var(--border-color); box-shadow: 0 4px 6px var(--shadow-color); display: flex; flex-direction: column; gap: 10px; }
 .skeleton { background: linear-gradient(90deg, var(--bg-container) 25%, var(--border-color) 50%, var(--bg-container) 75%); background-size: 200% 100%; animation: skeletonLoading 1.5s infinite; border-radius: 8px; }
 @keyframes skeletonLoading { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 .skeleton-title { height: 24px; width: 60%; } .skeleton-text { height: 14px; width: 100%; } .skeleton-text.short { width: 40%; }
-.mural-post { background: var(--bg-card); border-radius: 16px; padding: 20px; margin-bottom: 15px; border: 1px solid var(--border-color); text-align: left; box-shadow: 0 4px 10px var(--shadow-color); position: relative; animation: fadeIn 0.4s ease;}
-.mural-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; border-bottom: 1px dashed var(--border-color); padding-bottom: 10px; }
-.mural-title { font-size: 15px; font-weight: 800; color: var(--primary); margin-bottom: 4px; display: flex; align-items: center; gap: 8px; padding-right: 25px;}
-.mural-author { font-size: 11px; font-weight: bold; color: var(--cor-secundaria); } .mural-date { font-size: 11px; color: var(--cor-secundaria); }
-.mural-body { font-size: 14px; color: var(--cor-texto); line-height: 1.5; white-space: pre-wrap;}
-.btn-delete-mural { position: absolute; top: 15px; right: 15px; background: rgba(239, 68, 68, 0.1); color: #ef4444; border: none; padding: 6px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s;}
-.btn-delete-mural:hover { background: #ef4444; color: white; }
-.lucide { vertical-align: text-bottom; width: 18px; height: 18px; display: inline-block; margin-right: 6px; } .lucide-lg { width: 24px; height: 24px; margin-right: 8px; } .lucide-sm { width: 14px; height: 14px; margin-right: 4px; }
-.tabs-header { display: flex; gap: 5px; margin-bottom: 20px; border-bottom: 2px solid var(--border-color); overflow-x: auto; padding-bottom: 2px; } .tabs-header::-webkit-scrollbar { height: 4px; } .tabs-header::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 4px; }
-.tab-btn { flex: 1; min-width: max-content; padding: 12px 15px; background: transparent; border: none; font-size: 14px; font-weight: 700; color: var(--cor-secundaria); cursor: pointer; transition: all 0.2s; white-space: nowrap; border-bottom: 3px solid transparent; opacity: 0.7; } .tab-btn.ativo { color: var(--primary); border-bottom: 3px solid var(--primary); opacity: 1; }
-input[type="text"], input[type="password"], input[type="number"], input[type="date"], select, textarea { width: 100%; padding: 14px; margin-bottom: 15px; box-sizing: border-box; border-radius: 12px; border: 1px solid var(--border-color); background: var(--bg-input); color: var(--cor-texto); font-size: 15px; transition: all 0.3s ease; box-shadow: inset 0 2px 4px rgba(0,0,0,0.02); font-family: inherit;} input:focus, select:focus, textarea:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 4px rgba(0,134,255,0.15); }
-.btn-sistema, .btn-acao, .btn-est { transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; } .btn-sistema:disabled, .btn-acao:disabled, .btn-est:disabled { cursor: not-allowed; opacity: 0.6; transform: none !important; }
-.btn-sistema { width: 100%; padding: 16px; margin-bottom: 15px; background: var(--primary-gradiente); color: #ffffff !important; border: none; border-radius: 14px; font-size: 16px; font-weight: 700; box-shadow: 0 8px 20px rgba(0, 134, 255, 0.25); } .btn-sistema:hover:not(:disabled) { transform: translateY(-3px); box-shadow: 0 12px 25px rgba(0, 134, 255, 0.35); } .btn-sistema:active:not(:disabled) { transform: translateY(1px); }
-.botoes-acao { display: flex; gap: 12px; margin-top: 15px; } .btn-acao { flex: 1; padding: 14px; border: none; border-radius: 12px; font-size: 15px; font-weight: bold; color: #ffffff !important; } .btn-enviar { background: linear-gradient(135deg, #10b981 0%, #059669 100%); box-shadow: 0 6px 15px rgba(16, 185, 129, 0.3); } .btn-enviar:hover { transform: translateY(-2px); box-shadow: 0 8px 18px rgba(16, 185, 129, 0.4); } .btn-limpar { background: linear-gradient(135deg, #64748b 0%, #475569 100%); box-shadow: 0 6px 15px rgba(100, 116, 139, 0.3); } .btn-limpar:hover { background: #475569; transform: translateY(-2px); }
-.card-padrao { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; padding: 20px; margin-bottom: 25px; box-shadow: 0 4px 6px var(--shadow-color); text-align: left; } .card-promotor { display: flex; align-items: center; gap: 15px; } .label-promotor { font-size: 11px; color: var(--cor-secundaria); font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; } .nome-promotor { font-size: 18px; color: var(--primary); font-weight: 800; }
-.instrucao-cards { font-size: 14px; color: var(--cor-secundaria); margin-bottom: 15px; font-weight: bold; text-align: left; display: block; border-bottom: 1px solid var(--border-color); padding-bottom: 8px; } .grid-aparelhos { display: grid; grid-template-columns: repeat(auto-fill, minmax(75px, 1fr)); gap: 12px 8px; } .item-aparelho { display: flex; flex-direction: column; align-items: center; gap: 6px; } .card-aparelho { background: var(--bg-container); border: 1px solid var(--border-color); border-radius: 16px; width: 65px; height: 65px; cursor: pointer; display: flex; justify-content: center; align-items: center; transition: all 0.2s ease; box-shadow: 0 4px 10px var(--shadow-color); } .card-aparelho:hover { border-color: var(--primary); background: rgba(0, 134, 255, 0.05); transform: scale(1.08); } .emoji-card { font-size: 26px; } .nome-card { font-size: 10px; font-weight: 700; color: var(--cor-texto); text-align: center; }
-#area-conferencia { display: none; background: var(--bg-card); border: 2px dashed var(--primary); padding: 18px; border-radius: 16px; margin-bottom: 20px; text-align: left; animation: fadeIn 0.3s; } .item-pendente { background: var(--bg-container); border: 1px solid var(--border-color); padding: 12px; border-radius: 10px; display: flex; align-items: center; gap: 10px; color: var(--cor-texto); box-shadow: 0 2px 5px var(--shadow-color); margin-bottom: 8px; font-weight: 600;}
-.bottom-nav { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); width: calc(100% - 40px); max-width: 440px; background: var(--bg-container); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur); border: 1px solid var(--border-color); border-radius: 28px; padding: 8px 12px; display: none; justify-content: space-around; align-items: center; box-shadow: 0 20px 40px var(--shadow-color); z-index: 1000; } .bottom-nav.ativa { display: flex; animation: slideUpNav 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; } @keyframes slideUpNav { from { transform: translate(-50%, 100px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } } .nav-item { display: flex; flex-direction: column; align-items: center; gap: 4px; color: var(--cor-secundaria); font-size: 11px; font-weight: 600; cursor: pointer; padding: 8px 14px; border-radius: 20px; transition: all 0.3s ease; position: relative; } .nav-item.ativo { color: var(--primary); background: rgba(0, 134, 255, 0.1); transform: scale(1.05); } .nav-item i { width: 22px; height: 22px; margin: 0; }
-.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); display: none; justify-content: center; align-items: center; z-index: 2000; opacity: 0; transition: opacity 0.3s ease; } .modal-overlay.ativo { display: flex; opacity: 1; } .modal-content { background: var(--bg-container); backdrop-filter: var(--glass-blur); padding: 30px; border-radius: 24px; width: 90%; max-width: 400px; text-align: center; box-shadow: 0 25px 50px rgba(0,0,0,0.5); color: var(--cor-texto); transform: translateY(20px); transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); border: 1px solid var(--border-color); } .modal-overlay.ativo .modal-content { transform: translateY(0); } .modal-fullscreen-content { background: var(--bg-container); backdrop-filter: var(--glass-blur); padding: 25px; border-radius: 24px; width: 95%; max-width: 600px; height: 90vh; max-height: 850px; overflow-y: auto; text-align: left; position: relative; box-shadow: 0 25px 50px rgba(0,0,0,0.5); color: var(--cor-texto); border: 1px solid var(--border-color); }
-.seletor-promotores { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 12px; margin-bottom: 15px; white-space: nowrap; } .card-promotor-filtro { background: var(--bg-item); border: 1px solid var(--border-color); padding: 12px 18px; border-radius: 20px; font-size: 14px; font-weight: bold; color: var(--cor-secundaria); cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; } .card-promotor-filtro.ativo { background: var(--primary); color: white; border-color: var(--primary); box-shadow: 0 6px 15px rgba(0, 134, 255, 0.3); } .card-vendedor-venda { background: var(--bg-container); border: 1px solid var(--border-color); padding: 12px 18px; border-radius: 20px; font-size: 14px; font-weight: bold; color: var(--cor-secundaria); cursor: pointer; transition: all 0.2s; display: inline-block; box-shadow: 0 2px 5px var(--shadow-color); } .card-vendedor-venda.ativo { background: #10b981; color: white; border-color: #10b981; box-shadow: 0 6px 15px rgba(16, 185, 129, 0.3); transform: scale(1.05); }
-.estoque-item-linha { display: flex; justify-content: space-between; align-items: center; background: var(--bg-item); padding: 12px; border-radius: 8px; margin-bottom: 6px; border: 1px solid var(--border-color); color: var(--cor-texto); flex-wrap: wrap; gap: 8px; transition: background-color 0.2s ease;} .estoque-controles { display: flex; align-items: center; gap: 8px; } .btn-est { background: var(--primary); color: white; border: none; width: 32px; height: 32px; border-radius: 8px; font-weight: bold; font-size: 18px; display: flex; align-items: center; justify-content: center; } .qtd-badge { background: var(--bg-container); color: var(--cor-texto); border: 1px solid var(--border-color); padding: 6px 14px; border-radius: 8px; font-size: 14px; min-width: 40px; text-align: center; font-weight: bold; } .badge-rank { padding: 3px 8px; border-radius: 12px; font-weight: bold; color: white; font-size: 12px; display: inline-block; } .rank-1 { background-color: #ffd700; color: #856404; } .rank-2 { background-color: #c0c0c0; color: #383d41; } .rank-3 { background-color: #cd7f32; color: #fff; } .rank-outros { background-color: #64748b; color: #fff; }
+
+.lucide { vertical-align: text-bottom; width: 18px; height: 18px; display: inline-block; margin-right: 6px; }
+.lucide-lg { width: 24px; height: 24px; margin-right: 8px; }
+.lucide-sm { width: 14px; height: 14px; margin-right: 4px; }
+
+.tabs-header { display: flex; gap: 5px; margin-bottom: 20px; border-bottom: 2px solid var(--border-color); overflow-x: auto; padding-bottom: 2px; }
+.tabs-header::-webkit-scrollbar { height: 4px; }
+.tabs-header::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 4px; }
+.tab-btn { flex: 1; min-width: max-content; padding: 12px 15px; background: transparent; border: none; font-size: 14px; font-weight: 700; color: var(--cor-secundaria); cursor: pointer; transition: all 0.2s; white-space: nowrap; border-bottom: 3px solid transparent; opacity: 0.7; }
+.tab-btn.ativo { color: var(--primary); border-bottom: 3px solid var(--primary); opacity: 1; }
+
+input[type="text"], input[type="password"], input[type="number"], input[type="date"], select, textarea { width: 100%; padding: 14px; margin-bottom: 15px; box-sizing: border-box; border-radius: 12px; border: 1px solid var(--border-color); background: var(--bg-input); color: var(--cor-texto); font-size: 15px; transition: all 0.3s ease; box-shadow: inset 0 2px 4px rgba(0,0,0,0.02); font-family: inherit;}
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 4px rgba(0,134,255,0.15); }
+
+.btn-sistema, .btn-acao, .btn-est { transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.btn-sistema:disabled, .btn-acao:disabled, .btn-est:disabled { cursor: not-allowed; opacity: 0.6; transform: none !important; }
+.btn-sistema { width: 100%; padding: 16px; margin-bottom: 15px; background: var(--primary-gradiente); color: #ffffff !important; border: none; border-radius: 14px; font-size: 16px; font-weight: 700; box-shadow: 0 8px 20px rgba(0, 134, 255, 0.25); }
+.btn-sistema:hover:not(:disabled) { transform: translateY(-3px); box-shadow: 0 12px 25px rgba(0, 134, 255, 0.35); }
+.btn-sistema:active:not(:disabled) { transform: translateY(1px); }
+
+.botoes-acao { display: flex; gap: 12px; margin-top: 15px; }
+.btn-acao { flex: 1; padding: 14px; border: none; border-radius: 12px; font-size: 15px; font-weight: bold; color: #ffffff !important; }
+.btn-enviar { background: linear-gradient(135deg, #10b981 0%, #059669 100%); box-shadow: 0 6px 15px rgba(16, 185, 129, 0.3); }
+.btn-enviar:hover { transform: translateY(-2px); box-shadow: 0 8px 18px rgba(16, 185, 129, 0.4); }
+.btn-limpar { background: linear-gradient(135deg, #64748b 0%, #475569 100%); box-shadow: 0 6px 15px rgba(100, 116, 139, 0.3); }
+.btn-limpar:hover { background: #475569; transform: translateY(-2px); }
+
+.card-padrao { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; padding: 20px; margin-bottom: 25px; box-shadow: 0 4px 6px var(--shadow-color); text-align: left; }
+.card-promotor { display: flex; align-items: center; gap: 15px; }
+.label-promotor { font-size: 11px; color: var(--cor-secundaria); font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
+.nome-promotor { font-size: 18px; color: var(--primary); font-weight: 800; }
+
+.instrucao-cards { font-size: 14px; color: var(--cor-secundaria); margin-bottom: 15px; font-weight: bold; text-align: left; display: block; border-bottom: 1px solid var(--border-color); padding-bottom: 8px; }
+.grid-aparelhos { display: grid; grid-template-columns: repeat(auto-fill, minmax(75px, 1fr)); gap: 12px 8px; }
+.item-aparelho { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.card-aparelho { background: var(--bg-container); border: 1px solid var(--border-color); border-radius: 16px; width: 65px; height: 65px; cursor: pointer; display: flex; justify-content: center; align-items: center; transition: all 0.2s ease; box-shadow: 0 4px 10px var(--shadow-color); }
+.card-aparelho:hover { border-color: var(--primary); background: rgba(0, 134, 255, 0.05); transform: scale(1.08); }
+.emoji-card { font-size: 26px; }
+.nome-card { font-size: 10px; font-weight: 700; color: var(--cor-texto); text-align: center; }
+
+#area-conferencia { display: none; background: var(--bg-card); border: 2px dashed var(--primary); padding: 18px; border-radius: 16px; margin-bottom: 20px; text-align: left; animation: fadeIn 0.3s; }
+.item-pendente { background: var(--bg-container); border: 1px solid var(--border-color); padding: 12px; border-radius: 10px; display: flex; align-items: center; gap: 10px; color: var(--cor-texto); box-shadow: 0 2px 5px var(--shadow-color); margin-bottom: 8px; font-weight: 600;}
+
+.bottom-nav { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); width: calc(100% - 40px); max-width: 440px; background: var(--bg-container); backdrop-filter: var(--glass-blur); border: 1px solid var(--border-color); border-radius: 28px; padding: 8px 12px; display: none; justify-content: space-around; align-items: center; box-shadow: 0 20px 40px var(--shadow-color); z-index: 1000; }
+.bottom-nav.ativa { display: flex; animation: slideUpNav 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+@keyframes slideUpNav { from { transform: translate(-50%, 100px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
+.nav-item { display: flex; flex-direction: column; align-items: center; gap: 4px; color: var(--cor-secundaria); font-size: 11px; font-weight: 600; cursor: pointer; padding: 8px 14px; border-radius: 20px; transition: all 0.3s ease; position: relative; }
+.nav-item.ativo { color: var(--primary); background: rgba(0, 134, 255, 0.1); transform: scale(1.05); }
+.nav-item i { width: 22px; height: 22px; margin: 0; }
+
+.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); display: none; justify-content: center; align-items: center; z-index: 2000; opacity: 0; transition: opacity 0.3s ease; }
+.modal-overlay.ativo { display: flex; opacity: 1; }
+.modal-content { background: var(--bg-container); backdrop-filter: var(--glass-blur); padding: 30px; border-radius: 24px; width: 90%; max-width: 400px; text-align: center; box-shadow: 0 25px 50px rgba(0,0,0,0.5); color: var(--cor-texto); transform: translateY(20px); transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); border: 1px solid var(--border-color); }
+.modal-overlay.ativo .modal-content { transform: translateY(0); }
+.modal-fullscreen-content { background: var(--bg-container); backdrop-filter: var(--glass-blur); padding: 25px; border-radius: 24px; width: 95%; max-width: 600px; height: 90vh; max-height: 850px; overflow-y: auto; text-align: left; position: relative; box-shadow: 0 25px 50px rgba(0,0,0,0.5); color: var(--cor-texto); border: 1px solid var(--border-color); }
+
+.seletor-promotores { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 12px; margin-bottom: 15px; white-space: nowrap; }
+.card-promotor-filtro { background: var(--bg-item); border: 1px solid var(--border-color); padding: 12px 18px; border-radius: 20px; font-size: 14px; font-weight: bold; color: var(--cor-secundaria); cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; }
+.card-promotor-filtro.ativo { background: var(--primary); color: white; border-color: var(--primary); box-shadow: 0 6px 15px rgba(0, 134, 255, 0.3); }
+.card-vendedor-venda { background: var(--bg-container); border: 1px solid var(--border-color); padding: 12px 18px; border-radius: 20px; font-size: 14px; font-weight: bold; color: var(--cor-secundaria); cursor: pointer; transition: all 0.2s; display: inline-block; box-shadow: 0 2px 5px var(--shadow-color); }
+.card-vendedor-venda.ativo { background: #10b981; color: white; border-color: #10b981; box-shadow: 0 6px 15px rgba(16, 185, 129, 0.3); transform: scale(1.05); }
+
+.estoque-item-linha { display: flex; justify-content: space-between; align-items: center; background: var(--bg-item); padding: 12px; border-radius: 8px; margin-bottom: 6px; border: 1px solid var(--border-color); color: var(--cor-texto); flex-wrap: wrap; gap: 8px; transition: background-color 0.2s ease;}
+.estoque-controles { display: flex; align-items: center; gap: 8px; }
+.btn-est { background: var(--primary); color: white; border: none; width: 32px; height: 32px; border-radius: 8px; font-weight: bold; font-size: 18px; display: flex; align-items: center; justify-content: center; }
+.qtd-badge { background: var(--bg-container); color: var(--cor-texto); border: 1px solid var(--border-color); padding: 6px 14px; border-radius: 8px; font-size: 14px; min-width: 40px; text-align: center; font-weight: bold; }
+.badge-rank { padding: 3px 8px; border-radius: 12px; font-weight: bold; color: white; font-size: 12px; display: inline-block; }
+.rank-1 { background-color: #ffd700; color: #856404; } .rank-2 { background-color: #c0c0c0; color: #383d41; } .rank-3 { background-color: #cd7f32; color: #fff; } .rank-outros { background-color: #64748b; color: #fff; }
+
 .linha-admin { display: flex; justify-content: space-between; align-items: center; padding: 14px; background: var(--bg-container); border: 1px solid var(--border-color); border-radius: 12px; margin-bottom: 12px; font-size: 14px; box-shadow: 0 2px 5px var(--shadow-color); color: var(--cor-texto); transition: background-color 0.2s ease; }
-.btn-excluir, .btn-editar, .btn-editar-meta { border: none; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 12px; display: inline-flex; align-items: center; justify-content: center; transition: all 0.2s; } .btn-excluir { background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); } .btn-excluir:hover { background: #ef4444; color: white; } .btn-editar { background: rgba(0, 134, 255, 0.1); color: var(--primary); border: 1px solid rgba(0, 134, 255, 0.2); } .btn-editar:hover { background: var(--primary); color: white; } .btn-editar-meta { background: rgba(139, 92, 246, 0.1); color: #8b5cf6; border: 1px solid rgba(139, 92, 246, 0.2); } .btn-editar-meta:hover { background: #8b5cf6; color: white; }
-body.dark-mode .btn-editar-meta { color: #a78bfa; border-color: rgba(167, 139, 250, 0.3); } body.dark-mode .btn-editar { color: #60a5fa; border-color: rgba(96, 165, 250, 0.3); } body.dark-mode .btn-excluir { color: #f87171; border-color: rgba(248, 113, 113, 0.3); }
-.input-admin-row { display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; } .input-admin-row input, .input-admin-row select { margin-bottom: 0; padding: 12px; font-size: 14px; flex: 1; min-width: 140px; }
-#toast-container { position: fixed; top: 80px; right: 20px; left: 20px; z-index: 10000; display: flex; flex-direction: column; gap: 10px; pointer-events: none; align-items: center;} .toast { padding: 14px 20px; border-radius: 12px; color: white; font-size: 13px; font-weight: 600; box-shadow: 0 10px 25px rgba(0,0,0,0.3); opacity: 0; transform: translateY(-20px); transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1); text-align: left; max-width: 400px; width: 100%; pointer-events: auto; display: flex; align-items: center; gap: 12px; backdrop-filter: blur(10px); } .toast.show { opacity: 1; transform: translateY(0); } .toast.sucesso { background-color: rgba(16, 185, 129, 0.95); } .toast.erro { background-color: rgba(239, 68, 68, 0.95); } .toast.alerta { background-color: rgba(245, 158, 11, 0.95); } .toast.info { background-color: rgba(59, 130, 246, 0.95); }
-#tela-login { display: none; position: relative; padding: 20px 10px; overflow: hidden; min-height: 100%; flex-direction: column; justify-content: center; align-items: center; background: transparent;} #tela-login.ativa { display: flex; } .bg-watermark { position: absolute; top: 45%; left: 50%; transform: translate(-50%, -50%); width: 250px; height: 250px; background-image: url('https://upload.wikimedia.org/wikipedia/commons/b/b8/OPPO_Logo.svg'); background-repeat: no-repeat; background-position: center; background-size: contain; opacity: 0.04; pointer-events: none; z-index: 0; } body.dark-mode .bg-watermark { filter: invert(1); opacity: 0.03; } .login-content { position: relative; z-index: 1; width: 100%; max-width: 380px; text-align: center; padding-top: 50px; } .login-header { margin-bottom: 40px; } .login-header h2 { font-size: 34px; font-weight: 900; letter-spacing: -1px; margin-bottom: 5px; color: var(--cor-texto); text-transform: uppercase; } .login-header h3 { font-size: 15px; font-weight: 500; color: var(--cor-secundaria); margin-top: 0; } .login-inputs { display: flex; flex-direction: column; gap: 15px; margin-bottom: 30px; } .login-inputs input { background: var(--bg-item); border: 2px solid transparent; box-shadow: inset 0 2px 4px rgba(0,0,0,0.06); padding: 18px; font-size: 16px; width: 100%; border-radius: 16px; } body.dark-mode .login-inputs input { box-shadow: inset 0 2px 4px rgba(0,0,0,0.3); } .login-inputs input:focus { border-color: var(--primary); background: var(--bg-input); box-shadow: 0 0 0 4px rgba(0, 134, 255, 0.15); } .btn-login-premium { background: var(--primary-gradiente); color: white; font-weight: 800; font-size: 16px; text-transform: uppercase; padding: 20px; border-radius: 16px; border: none; width: 100%; box-shadow: 0 10px 25px rgba(0, 134, 255, 0.35); transition: all 0.3s; cursor: pointer;} .btn-login-premium:hover { transform: translateY(-3px); box-shadow: 0 15px 35px rgba(0, 134, 255, 0.45); } .login-footer { margin-top: 50px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; width: 100%; } .logo-rodape-login { height: 22px; width: auto; opacity: 0.8; transition: filter 0.3s ease; } body.dark-mode .logo-rodape-login { filter: invert(1) brightness(2); opacity: 0.9; }
+.btn-excluir, .btn-editar, .btn-editar-meta { border: none; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 12px; display: inline-flex; align-items: center; justify-content: center; transition: all 0.2s; }
+.btn-excluir { background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); } .btn-excluir:hover { background: #ef4444; color: white; }
+.btn-editar { background: rgba(0, 134, 255, 0.1); color: var(--primary); border: 1px solid rgba(0, 134, 255, 0.2); } .btn-editar:hover { background: var(--primary); color: white; }
+.btn-editar-meta { background: rgba(139, 92, 246, 0.1); color: #8b5cf6; border: 1px solid rgba(139, 92, 246, 0.2); } .btn-editar-meta:hover { background: #8b5cf6; color: white; }
+
+body.dark-mode .btn-editar-meta { color: #a78bfa; border-color: rgba(167, 139, 250, 0.3); }
+body.dark-mode .btn-editar { color: #60a5fa; border-color: rgba(96, 165, 250, 0.3); }
+body.dark-mode .btn-excluir { color: #f87171; border-color: rgba(248, 113, 113, 0.3); }
+
+.input-admin-row { display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+.input-admin-row input, .input-admin-row select { margin-bottom: 0; padding: 12px; font-size: 14px; flex: 1; min-width: 140px; }
+
+#toast-container { position: fixed; top: 80px; right: 20px; left: 20px; z-index: 10000; display: flex; flex-direction: column; gap: 10px; pointer-events: none; align-items: center;}
+.toast { padding: 14px 20px; border-radius: 12px; color: white; font-size: 13px; font-weight: 600; box-shadow: 0 10px 25px rgba(0,0,0,0.3); opacity: 0; transform: translateY(-20px); transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1); text-align: left; max-width: 400px; width: 100%; pointer-events: auto; display: flex; align-items: center; gap: 12px; backdrop-filter: blur(10px); }
+.toast.show { opacity: 1; transform: translateY(0); }
+.toast.sucesso { background-color: rgba(16, 185, 129, 0.95); } .toast.erro { background-color: rgba(239, 68, 68, 0.95); } .toast.alerta { background-color: rgba(245, 158, 11, 0.95); } .toast.info { background-color: rgba(59, 130, 246, 0.95); }
+
+#tela-login { display: none; position: relative; padding: 20px 10px; overflow: hidden; min-height: 100%; flex-direction: column; justify-content: center; align-items: center; background: transparent;} #tela-login.ativa { display: flex; }
+.bg-watermark { position: absolute; top: 45%; left: 50%; transform: translate(-50%, -50%); width: 250px; height: 250px; background-image: url('https://upload.wikimedia.org/wikipedia/commons/b/b8/OPPO_Logo.svg'); background-repeat: no-repeat; background-position: center; background-size: contain; opacity: 0.04; pointer-events: none; z-index: 0; } body.dark-mode .bg-watermark { filter: invert(1); opacity: 0.03; }
+.login-content { position: relative; z-index: 1; width: 100%; max-width: 380px; text-align: center; padding-top: 50px; }
+.login-header { margin-bottom: 40px; } .login-header h2 { font-size: 34px; font-weight: 900; letter-spacing: -1px; margin-bottom: 5px; color: var(--cor-texto); text-transform: uppercase; } .login-header h3 { font-size: 15px; font-weight: 500; color: var(--cor-secundaria); margin-top: 0; }
+.login-inputs { display: flex; flex-direction: column; gap: 15px; margin-bottom: 30px; } .login-inputs input { background: var(--bg-item); border: 2px solid transparent; box-shadow: inset 0 2px 4px rgba(0,0,0,0.06); padding: 18px; font-size: 16px; width: 100%; border-radius: 16px; } body.dark-mode .login-inputs input { box-shadow: inset 0 2px 4px rgba(0,0,0,0.3); } .login-inputs input:focus { border-color: var(--primary); background: var(--bg-input); box-shadow: 0 0 0 4px rgba(0, 134, 255, 0.15); }
+.btn-login-premium { background: var(--primary-gradiente); color: white; font-weight: 800; font-size: 16px; text-transform: uppercase; padding: 20px; border-radius: 16px; border: none; width: 100%; box-shadow: 0 10px 25px rgba(0, 134, 255, 0.35); transition: all 0.3s; cursor: pointer;} .btn-login-premium:hover { transform: translateY(-3px); box-shadow: 0 15px 35px rgba(0, 134, 255, 0.45); }
+.login-footer { margin-top: 50px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; width: 100%; } .logo-rodape-login { height: 22px; width: auto; opacity: 0.8; transition: filter 0.3s ease; } body.dark-mode .logo-rodape-login { filter: invert(1) brightness(2); opacity: 0.9; }
 .card-estoque-pop { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; padding: 15px; margin-bottom: 15px; box-shadow: 0 4px 10px var(--shadow-color); text-align: left; display: flex; flex-direction: column; gap: 10px; } .card-estoque-pop .header-pop { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed var(--border-color); padding-bottom: 10px; }
 #painel-erro-conexao { display: none; position: fixed; top: 15px; left: 50%; transform: translateX(-50%); z-index: 10001; background: rgba(239, 68, 68, 0.95); backdrop-filter: blur(8px); border: 1px solid #ff8080; padding: 12px 20px; border-radius: 14px; text-align: center; box-shadow: 0 10px 25px rgba(239,68,68,0.4); width: 90%; max-width: 400px; }
 </style>
@@ -112,18 +197,6 @@ body.dark-mode .btn-editar-meta { color: #a78bfa; border-color: rgba(167, 139, 2
         <h3 style="color: var(--primary); display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 15px;"><i data-lucide="bar-chart-2"></i> Metas & Comissões</h3>
         <div id="texto-info-comissao">Carregando dados...</div>
         <button class="btn-sistema" style="background: var(--bg-item); color: var(--cor-texto) !important; border: 1px solid var(--border-color); margin-top: 20px; box-shadow: none;" onclick="document.getElementById('modal-info-comissao').classList.remove('ativo')">Voltar ao Dashboard</button>
-    </div>
-</div>
-
-<div id="modal-mural" class="modal-overlay">
-    <div class="modal-content">
-        <h3 style="color: var(--primary); display: flex; align-items: center; justify-content: center; gap: 8px;"><i data-lucide="megaphone"></i> Novo Comunicado</h3>
-        <input type="text" id="mural-titulo" placeholder="Título (Ex: Nova Campanha!)">
-        <textarea id="mural-mensagem" placeholder="Digite o comunicado para a equipe..." style="width: 100%; padding: 14px; margin-bottom: 15px; border-radius: 12px; border: 1px solid var(--border-color); background: var(--bg-input); color: var(--cor-texto); font-size: 14px; min-height: 100px; font-family: inherit; box-sizing: border-box;"></textarea>
-        <div class="botoes-acao">
-            <button class="btn-acao btn-limpar" onclick="fecharModalMural()">Cancelar</button>
-            <button class="btn-acao btn-enviar" style="background: var(--primary-gradiente);" onclick="publicarMural()"><i data-lucide="send" class="lucide-sm"></i> Publicar</button>
-        </div>
     </div>
 </div>
 
@@ -279,7 +352,6 @@ body.dark-mode .btn-editar-meta { color: #a78bfa; border-color: rgba(167, 139, 2
 </div>
 
 <div class="container">
-    <!-- CABEÇALHO GLOBAL / VOLTAR -->
     <div class="header-global" id="header-global">
         <div id="header-view-home" style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
             <div class="header-user-info">
@@ -303,7 +375,6 @@ body.dark-mode .btn-editar-meta { color: #a78bfa; border-color: rgba(167, 139, 2
         </div>
     </div>
 
-<!-- TELA LOGIN PREMIUM -->
 <div id="tela-login" class="tela ativa">
     <div class="bg-watermark"></div>
     <div class="login-content">
@@ -323,29 +394,19 @@ body.dark-mode .btn-editar-meta { color: #a78bfa; border-color: rgba(167, 139, 2
     </div>
 </div>
 
-<!-- MENU PRINCIPAL -->
 <div id="tela-menu" class="tela">
     <div style="background: var(--bg-card); padding: 25px; border-radius: 20px; border: 1px solid var(--border-color); margin-bottom: 25px; margin-top: 10px;">
         <h4 style="margin-top: 0; margin-bottom: 20px; font-size: 16px;"><i data-lucide="zap"></i> Ações Rápidas</h4>
         <button class="btn-sistema" id="btn-menu-venda" onclick="navAction('venda', document.getElementById('nav-venda'))" style="font-size: 18px; padding: 20px; margin-bottom: 15px;"><i data-lucide="plus-circle" class="lucide-lg"></i> Lançar Nova Venda</button>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+        <div id="grid-botoes-menu" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
             <button class="btn-sistema" id="btn-dashboard" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); margin: 0; font-size: 14px; padding: 16px;" onclick="navAction('dashboard', document.getElementById('nav-acomp'))"><i data-lucide="bar-chart-2"></i> Metas</button>
             <button class="btn-sistema" id="btn-menu-historico" style="display: none; background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%); margin: 0; font-size: 14px; padding: 16px;" onclick="abrirHistorico('geral')"><i data-lucide="clock"></i> Histórico</button>
             <button class="btn-sistema" id="btn-menu-auditoria" style="display: none; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); margin: 0; font-size: 14px; padding: 16px; grid-column: span 2;" onclick="abrirHistorico('estoque')"><i data-lucide="search"></i> Auditoria de Estoque</button>
         </div>
     </div>
-    
-    <!-- MURAL DE COMUNICAÇÃO FEED -->
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 30px; margin-bottom: 15px;">
-        <h4 style="margin: 0; font-size: 16px; display: flex; align-items: center; gap: 8px;"><i data-lucide="bell"></i> Mural de Comunicação</h4>
-        <button id="btn-novo-mural" style="display: none; background: rgba(0,134,255,0.1); color: var(--primary); border: none; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: bold; cursor: pointer; align-items: center; gap: 4px;" onclick="abrirModalMural()"><i data-lucide="plus" class="lucide-sm"></i> Novo</button>
-    </div>
-    <div id="container-mural"></div>
-
     <button class="btn-sistema btn-voltar" style="background: transparent; color: #ef4444 !important; box-shadow: none; border: 2px solid #ef4444; font-weight: bold; margin-top: 20px;" onclick="fazerLogout()"><i data-lucide="log-out"></i> Sair do Sistema</button>
 </div>
 
-<!-- TELAS REGULARES -->
 <div id="tela-promotores" class="tela"><div id="botoes-promotores-dinamicos"></div></div>
 <div id="tela-lojas" class="tela"><div id="botoes-lojas-dinamicos"></div></div>
 
@@ -377,7 +438,6 @@ body.dark-mode .btn-editar-meta { color: #a78bfa; border-color: rgba(167, 139, 2
 <button class="btn-sistema btn-voltar" id="btn-trocar-loja" style="margin-bottom: 10px; display:none; padding:12px; font-size:14px; font-weight:bold;"></button>
 </div>
 
-<!-- TELA ACOMPANHAMENTO -->
 <div id="tela-acompanhamento" class="tela">
 <div id="seletor-promotores" class="seletor-promotores"></div>
 <div id="seletor-sub-promotores" class="seletor-promotores" style="display: none; padding-top: 0; margin-top: -10px; margin-bottom: 15px;"></div>
@@ -388,7 +448,6 @@ body.dark-mode .btn-editar-meta { color: #a78bfa; border-color: rgba(167, 139, 2
 <div class="container-acompanhamento" id="lista-agrupada">Carregando dados da nuvem...</div>
 </div>
 
-<!-- TELA ESTOQUE -->
 <div id="tela-estoque" class="tela">
 <div id="seletor-promotores-estoque" class="seletor-promotores"></div>
 <button class="btn-sistema" id="btn-atualizar-estoque" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); margin-bottom: 15px;" onclick="carregarEstoqueDoBanco()"><i data-lucide="refresh-cw"></i> Atualizar Estoque</button>
@@ -424,29 +483,23 @@ body.dark-mode .btn-editar-meta { color: #a78bfa; border-color: rgba(167, 139, 2
 <div class="container-acompanhamento" id="lista-estoque-agrupada">Carregando estoque da nuvem...</div>
 </div>
 
-<!-- TELA HISTÓRICO DE AÇÕES -->
 <div id="tela-historico" class="tela">
-    
     <div style="margin-bottom: 15px;">
         <input type="text" id="busca-historico" placeholder="🔍 Buscar por loja, modelo ou detalhes..." style="border-color: #8b5cf6; background-color: var(--bg-card); margin-bottom: 0;" onkeyup="aplicarFiltroHistorico()">
     </div>
-
     <div style="margin-bottom: 10px; text-align: left; display: none;" id="container-filtro-sup-historico">
         <label style="font-size: 13px; font-weight: bold; color: var(--cor-secundaria); display: block; margin-bottom: 6px;">Filtrar Região (Supervisor):</label>
         <select id="filtro-sup-historico" style="width: 100%; border-color: var(--primary); background-color: var(--bg-card); padding: 14px; margin-bottom: 15px;" onchange="mudouSupHistorico()"></select>
     </div>
-
     <div style="margin-bottom: 15px; text-align: left;">
         <label style="font-size: 13px; font-weight: bold; color: var(--cor-secundaria); display: block; margin-bottom: 6px;">Filtrar Usuário:</label>
         <select id="filtro-promotor-historico" style="width: 100%; border-color: #8b5cf6; background-color: var(--bg-card); padding: 14px; margin-bottom: 0;" onchange="aplicarFiltroHistorico()"></select>
     </div>
-
     <div style="margin-bottom: 15px; text-align: left;">
         <label style="font-size: 13px; font-weight: bold; color: var(--cor-secundaria); display: flex; align-items: center; gap: 8px; cursor: pointer;">
             <input type="checkbox" id="filtro-ocultar-cancelados" onchange="aplicarFiltroHistorico()" checked style="width: auto; margin: 0;"> Ocultar vendas canceladas
         </label>
     </div>
-
     <div style="display: flex; gap: 10px; margin-bottom: 20px;">
         <div style="flex: 1; text-align: left;">
             <label style="font-size: 13px; font-weight: bold; color: var(--cor-secundaria); display: block; margin-bottom: 6px;">Data Início:</label>
@@ -457,33 +510,26 @@ body.dark-mode .btn-editar-meta { color: #a78bfa; border-color: rgba(167, 139, 2
             <input type="date" id="filtro-data-fim-historico" style="border-color: #8b5cf6; background-color: var(--bg-card); padding: 14px; margin-bottom: 0;" onchange="aplicarFiltroHistorico()">
         </div>
     </div>
-
     <div style="display:flex;">
         <button class="btn-sistema" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); margin-bottom: 20px; width: calc(50% - 5px);" onclick="carregarHistoricoDoBanco(true)"><i data-lucide="cloud-download"></i> Atualizar</button>
         <button class="btn-sistema" id="btn-export-historico" style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); margin-bottom: 20px; margin-left: 10px; width: calc(50% - 5px);" onclick="baixarRelatorioHistorico()"><i data-lucide="download"></i> Excel</button>
     </div>
-    
     <div id="lista-historico" style="text-align: left; min-height: 300px; max-height: 600px; overflow-y: auto; background: var(--bg-card); padding: 18px; border-radius: 16px; border: 1px solid var(--border-color);">Carregando histórico da nuvem...</div>
 </div>
 
-<!-- TELA DASHBOARD -->
 <div id="tela-dashboard" class="tela">
     <div class="controles-topo-acompanhamento" style="margin-bottom: 20px; display: flex; gap: 10px; align-items: center;">
         <select id="seletor-mes-dash" class="seletor-mes" style="padding: 14px; font-size: 15px; margin-bottom: 0; flex: 1; border-color: var(--primary);" onchange="abrirDashboard()"><option value="">Mês Atual</option></select>
         <button class="btn-sistema" onclick="forcarAtualizacaoDashboard()" style="margin-bottom: 0; width: auto; padding: 14px 18px; border-radius: 12px; background: var(--primary-gradiente);" title="Forçar Atualização"><i data-lucide="refresh-cw" id="icon-refresh-dash" style="margin: 0;"></i></button>
     </div>
-
     <div id="container-filtro-supervisor-dash" style="display: none; margin-bottom: 15px;">
         <label style="font-size: 13px; font-weight: bold; color: var(--cor-secundaria); display: block; text-align: left; margin-bottom: 6px;">Equipe / Região:</label>
         <select id="filtro-supervisor-dash" class="seletor-mes" style="width: 100%; padding: 14px;" onchange="mudouSupervisorDash()"></select>
     </div>
-    
     <div id="container-filtro-promotor-dash" style="display: none; margin-bottom: 20px;">
         <label style="font-size: 13px; font-weight: bold; color: var(--cor-secundaria); display: block; text-align: left; margin-bottom: 6px;">Promotor:</label>
         <select id="filtro-promotor-dash" class="seletor-mes" style="width: 100%; padding: 14px; border-color: #8b5cf6; background-color: var(--bg-card);" onchange="abrirDashboard()"></select>
     </div>
-
-    <!-- CARDS DE VALORES -->
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
         <div style="background: var(--primary-gradiente); color: white; padding: 20px 15px; border-radius: 20px; box-shadow: 0 10px 20px rgba(0,134,255,0.25);">
             <span style="font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; display: flex; align-items: center; justify-content: center; gap: 6px;"><i data-lucide="shopping-bag" class="lucide-sm"></i> Vendas Totais</span>
@@ -494,8 +540,6 @@ body.dark-mode .btn-editar-meta { color: #a78bfa; border-color: rgba(167, 139, 2
             <h1 id="media-diaria-geral" style="margin: 10px 0 0 0; font-size: 32px;">...</h1>
         </div>
     </div>
-
-    <!-- CARD COMISSÃO PREVISTA -->
     <div onclick="toggleComissao()" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: white; padding: 25px 20px; border-radius: 20px; box-shadow: 0 10px 25px rgba(245,158,11,0.3); cursor: pointer; transition: transform 0.2s; margin-bottom: 25px; text-align: left; display: flex; justify-content: space-between; align-items: center;">
         <div>
             <span style="font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; display: flex; align-items: center; gap: 6px; margin-bottom: 8px;"><i data-lucide="dollar-sign" class="lucide-sm"></i> Comissão Prevista</span>
@@ -506,48 +550,39 @@ body.dark-mode .btn-editar-meta { color: #a78bfa; border-color: rgba(167, 139, 2
             <span id="icone-olho-comissao" style="background: rgba(255,255,255,0.2); border-radius: 50%; width: 48px; height: 48px; display: flex; align-items: center; justify-content: center;"><i data-lucide="eye" style="margin:0;"></i></span>
         </div>
     </div>
-
     <div style="background: var(--bg-card); padding: 20px; border-radius: 20px; margin-bottom: 25px; border: 1px solid var(--border-color);">
         <h4 style="margin-top:0; text-align:left; display: flex; align-items: center; gap: 8px;"><i data-lucide="pie-chart"></i> Modelos Mais Vendidos</h4>
         <div style="position: relative; height: 260px; width: 100%; display: flex; justify-content: center;"><canvas id="graficoTopModelos"></canvas></div>
     </div>
-
     <div style="background: var(--bg-card); padding: 20px; border-radius: 20px; margin-bottom: 25px; text-align: left; border: 1px solid var(--border-color);">
         <h4 style="margin-top:0; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; display: flex; align-items: center; gap: 8px;"><i data-lucide="star"></i> Aparelhos Foco</h4>
         <div id="lista-foco-ativo-dash" style="font-size: 14px; margin-bottom: 15px; margin-top: 15px; color: var(--cor-texto);">Carregando alvo...</div>
         <div id="detalhe-coparticipacao-cards" style="font-size: 14px; color: var(--cor-secundaria); border-top: 1px dashed var(--border-color); padding-top: 15px;">Carregando detalhes...</div>
     </div>
-
     <div style="background: var(--bg-card); padding: 20px; border-radius: 20px; margin-bottom: 25px; border: 1px solid var(--border-color);">
         <h4 style="margin-top:0; text-align:left; display: flex; align-items: center; gap: 8px;"><i data-lucide="target"></i> Meta Foco vs Realizado</h4>
         <div style="width: 100%; overflow-x: auto; overflow-y: hidden;"><div id="wrap-graficoMetaPremiumCapa" style="position: relative; height: 350px; min-width: 100%;"><canvas id="graficoMetaPremiumCapa"></canvas></div></div>
     </div>
-
     <div style="background: var(--bg-card); padding: 20px; border-radius: 20px; margin-bottom: 25px; border: 1px solid var(--border-color);">
         <h4 style="margin-top:0; text-align:left; display: flex; align-items: center; gap: 8px;"><i data-lucide="percent"></i> Coparticipação Premium (%)</h4>
         <div style="width: 100%; overflow-x: auto; overflow-y: hidden;"><div id="wrap-graficoCoparticipacaoPromotores" style="position: relative; height: 350px; min-width: 100%;"><canvas id="graficoCoparticipacaoPromotores"></canvas></div></div>
     </div>
-
     <div style="background: var(--bg-card); padding: 20px; border-radius: 20px; margin-bottom: 25px; text-align: left; border: 1px solid var(--border-color);">
         <h4 id="titulo-ranking-dash" style="margin-top:0; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; display: flex; align-items: center; gap: 8px;"><i data-lucide="award"></i> Ranking</h4>
         <div id="lista-ranking-promotores" style="margin-top: 15px;">Carregando ranking...</div>
     </div>
-
     <div style="background: var(--bg-card); padding: 20px; border-radius: 20px; margin-bottom: 25px; border: 1px solid var(--border-color);">
         <h4 style="margin-top:0; text-align:left; display: flex; align-items: center; gap: 8px;"><i data-lucide="store"></i> Vendas por Loja</h4>
         <div style="width: 100%; overflow-x: auto; overflow-y: hidden;"><div id="wrap-graficoVendasLoja" style="position: relative; height: 350px; min-width: 100%;"><canvas id="graficoVendasLoja"></canvas></div></div>
     </div>
 </div>
 
-<!-- TELA: PAINEL DO GESTOR E SUPERVISOR -->
 <div id="tela-admin" class="tela">
     <div class="tabs-header">
         <button class="tab-btn ativo admin-tab-btn" onclick="switchTab('admin-tab-equipe', 'admin-tab')"><i data-lucide="users"></i> Equipes & Regiões</button>
         <button class="tab-btn admin-tab-btn" id="btn-tab-regras" onclick="switchTab('admin-tab-comissao', 'admin-tab')"><i data-lucide="dollar-sign"></i> Regras de Comissão</button>
         <button class="tab-btn admin-tab-btn" onclick="switchTab('admin-tab-global', 'admin-tab')"><i data-lucide="smartphone"></i> Modelos</button>
     </div>
-
-    <!-- ABA 1: EQUIPES E REGIÕES -->
     <div id="admin-tab-equipe" class="admin-tab-content" style="display: block;">
         <div class="bloco-admin" id="bloco-lista-supervisores" style="background: var(--bg-card); border-radius: 20px; border: 1px solid var(--border-color); padding:20px;">
             <h4><i data-lucide="network"></i> Regiões e Equipes</h4>
@@ -561,7 +596,6 @@ body.dark-mode .btn-editar-meta { color: #a78bfa; border-color: rgba(167, 139, 2
                 <input type="text" id="busca-admin" placeholder="Buscar usuário..." onkeyup="renderizarAdminUsuarios()" style="flex: 2; padding: 10px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-input); color: var(--cor-texto);">
             </div>
             <div id="lista-admin-supervisores" style="max-height: 400px; overflow-y: auto; margin-bottom: 15px;"></div>
-            
             <div id="bloco-criar-gestor" style="display: none; border-top: 1px dashed var(--border-color); padding-top: 20px; margin-top: 15px;">
                 <label style="font-size: 13px; font-weight: bold; color: #10b981; display: flex; align-items: center; gap: 6px; margin-bottom: 12px;"><i data-lucide="user-plus" class="lucide-sm"></i> Adicionar Novo Gestor/Supervisor:</label>
                 <div class="input-admin-row"><input type="text" id="admin-gs-login" placeholder="Login"><input type="text" id="admin-gs-nome" placeholder="Nome"></div>
@@ -581,8 +615,6 @@ body.dark-mode .btn-editar-meta { color: #a78bfa; border-color: rgba(167, 139, 2
             </div>
         </div>
     </div>
-
-    <!-- ABA 2: REGRAS DE COMISSÃO -->
     <div id="admin-tab-comissao" class="admin-tab-content" style="display: none;">
         <div class="bloco-admin" id="bloco-admin-foco" style="display: none; background: var(--bg-card); border-radius: 20px; border: 1px solid var(--border-color); padding:20px;">
             <h4><i data-lucide="star"></i> Aparelhos Foco / Coparticipação</h4>
@@ -595,14 +627,11 @@ body.dark-mode .btn-editar-meta { color: #a78bfa; border-color: rgba(167, 139, 2
                 </div>
             </div>
             <div id="admin-foco-container" style="text-align: left;"></div>
-            
             <div style="margin-top: 20px;">
                 <button class="btn-sistema" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);" onclick="salvarConfiguracoesGlobais(true)"><i data-lucide="save"></i> Salvar Regras de Comissão</button>
             </div>
         </div>
     </div>
-
-    <!-- ABA 3: GLOBAL (Modelos) -->
     <div id="admin-tab-global" class="admin-tab-content" style="display: none;">
         <div class="bloco-admin" style="background: var(--bg-card); border-radius: 20px; border: 1px solid var(--border-color); padding:20px;">
             <h4><i data-lucide="smartphone"></i> Cadastro de Novos Modelos (Global)</h4>
@@ -614,39 +643,30 @@ body.dark-mode .btn-editar-meta { color: #a78bfa; border-color: rgba(167, 139, 2
 </div>
 
 </div>
-<script>
-// !!! COLOQUE AQUI A SUA URL DA API !!!
-const URL_DA_SUA_API = "https://script.google.com/macros/s/AKfycbzg7zvtitqzNtB7ghbZ-zg0-W3fTrkAswlORizvAfyPETdbHivMRqvJyrfTEZ36WuXGPQ/exec";
 
+<script>
+const URL_DA_SUA_API = "https://script.google.com/macros/s/AKfycbzg7zvtitqzNtB7ghbZ-zg0-W3fTrkAswlORizvAfyPETdbHivMRqvJyrfTEZ36WuXGPQ/exec";
 if (window.NodeList && !NodeList.prototype.forEach) { NodeList.prototype.forEach = Array.prototype.forEach; }
+
 let usuarioLogado = null; let usuarioEditandoSenha = null; let lojaAtual = ""; let vendedoresSelecionados = [];
 let aparelhoEmSelecao = null; let emojisPendentes = []; let pendenciasEstoque = {}; let dadosEstoqueGlobal = [];
 let promotorFiltroAtual = "todos"; let subPromotorFiltroAtual = "todos"; let promotorEstoqueFiltroAtual = "todos";
 let chartCoparticipacao = null; let chartCapa = null; let chartLojas = null; let chartModelos = null;
+
 let bancoUsuarios = {}; let lojasConfig = {}; let mapaEmojis = {};
 let aparelhosPremium = { "geral": {} }; let taxasCoparticipacao = { "geral": 25 }; let valoresComissao = { "geral": {} };
 let dadosHistoricoGlobal = []; let dadosAcompanhamentoGlobal = []; 
 let supervisorGerenciadoAtual = null; let mostruariosGlobais = JSON.parse(localStorage.getItem('mostruariosGlobais')) || {}; 
 let tipoHistoricoAtual = 'geral'; let mostruarioEmEdicao = null; 
-let muralGlobal = []; const fallbackMural = []; const fallbackUsuarios = { "master": { nome: "Diretor Master", senha: "Silva_9061", cargo: "master", meta: 0, lojasPermitidas: [], criadoPor: "" }}; const fallbackLojas = {}; const fallbackEmojis = {}; const fallbackPremium = { "geral": {} };
+const fallbackUsuarios = { "master": { nome: "Diretor Master", senha: "Silva_9061", cargo: "master", meta: 0, lojasPermitidas: [], criadoPor: "" }}; const fallbackLojas = {}; const fallbackEmojis = {}; const fallbackPremium = { "geral": {} };
 
 function getSkeletonHtml(qtd) { let html = ''; for(let i=0; i<qtd; i++) { html += `<div class="skeleton-card"><div class="skeleton skeleton-title"></div><div class="skeleton skeleton-text"></div><div class="skeleton skeleton-text short"></div></div>`; } return html; }
 
 document.addEventListener('DOMContentLoaded', () => {
     loadIcons();
-    let tempoEsgotado = setTimeout(() => {
-        if (document.getElementById('tela-loading').style.display !== 'none') {
-            bancoUsuarios = fallbackUsuarios; lojasConfig = fallbackLojas; mapaEmojis = fallbackEmojis; aparelhosPremium = fallbackPremium; muralGlobal = fallbackMural;
-            document.getElementById('tela-loading').style.display = 'none'; mudarTela('tela-login');
-            mostrarToast("Sem conexão com o servidor. Usando modo offline.", "alerta");
-            mostrarBotaoReconexao();
-        }
-    }, 6000); 
-
     fetch(URL_DA_SUA_API + "?acao=config", { redirect: "follow" })
     .then(r => r.json())
     .then(res => {
-        clearTimeout(tempoEsgotado); 
         if (res.status === "sucesso" && res.configuracoes) {
             bancoUsuarios = res.configuracoes.bancoUsuarios || fallbackUsuarios; 
             lojasConfig = res.configuracoes.lojasConfig || {}; 
@@ -654,24 +674,21 @@ document.addEventListener('DOMContentLoaded', () => {
             aparelhosPremium = res.configuracoes.aparelhosPremium || fallbackPremium;
             taxasCoparticipacao = res.configuracoes.taxasCoparticipacao || { "geral": 25 }; 
             valoresComissao = res.configuracoes.valoresComissao || { "geral": {} };
-            muralGlobal = res.configuracoes.mural || fallbackMural;
         }
         bancoUsuarios["master"] = { nome: "Diretor Master", senha: "Silva_9061", cargo: "master", meta: 0, lojasPermitidas: [] };
         document.getElementById('tela-loading').style.display = 'none'; mudarTela('tela-login'); 
     }).catch(err => {
-        clearTimeout(tempoEsgotado); 
-        bancoUsuarios = fallbackUsuarios; muralGlobal = fallbackMural;
+        bancoUsuarios = fallbackUsuarios;
         bancoUsuarios["master"] = { nome: "Diretor Master", senha: "Silva_9061", cargo: "master", meta: 0, lojasPermitidas: [] };
-        document.getElementById('tela-loading').style.display = 'none'; 
-        mudarTela('tela-login');
-        mostrarToast("Iniciando sem rede (Modo Local).", "alerta");
+        document.getElementById('tela-loading').style.display = 'none'; mudarTela('tela-login');
+        mostrarToast("Modo Offline Ativado.", "alerta");
         mostrarBotaoReconexao();
     });
 });
 
 window.addEventListener('offline', () => { mostrarBotaoReconexao(); }); window.addEventListener('online', () => { tentarReconectarAgora(); });
 function mostrarBotaoReconexao() { let painel = document.getElementById('painel-erro-conexao'); if (painel) painel.style.display = 'block'; loadIcons(); }
-function tentarReconectarAgora() { mostrarToast("Tentando reconectar...", "info"); fetch(URL_DA_SUA_API + "?acao=config").then(r => { if (!r.ok) throw new Error(); return r.json(); }).then(res => { if (res.status === "sucesso") { let painel = document.getElementById('painel-erro-conexao'); if (painel) painel.style.display = 'none'; mostrarToast("Conexão restabelecida!", "sucesso"); if (document.getElementById('tela-acompanhamento').classList.contains('ativa')) carregarDadosDoBanco(); else if (document.getElementById('tela-estoque').classList.contains('ativa')) carregarEstoqueDoBanco(); else if (document.getElementById('tela-historico').classList.contains('ativa')) carregarHistoricoDoBanco(true); } else { throw new Error(); } }).catch(err => { mostrarToast("Ainda sem conexão. Verifique sua rede.", "alerta"); }); }
+function tentarReconectarAgora() { mostrarToast("Tentando reconectar...", "info"); fetch(URL_DA_SUA_API + "?acao=config").then(r => { if (!r.ok) throw new Error(); return r.json(); }).then(res => { if (res.status === "sucesso") { let painel = document.getElementById('painel-erro-conexao'); if (painel) painel.style.display = 'none'; mostrarToast("Conexão restabelecida!", "sucesso"); if (document.getElementById('tela-acompanhamento').classList.contains('ativa')) carregarDadosDoBanco(); else if (document.getElementById('tela-estoque').classList.contains('ativa')) carregarEstoqueDoBanco(); else if (document.getElementById('tela-historico').classList.contains('ativa')) carregarHistoricoDoBanco(true); } else { throw new Error(); } }).catch(err => { mostrarToast("Ainda sem conexão.", "alerta"); }); }
 function podeGerenciar(logado, alvoId) { if (!logado) return false; if (logado.id === alvoId) return true; if (logado.id === "master" || logado.cargo === "master") return true; if (logado.cargo === "gestor") return true; let alvo = bancoUsuarios[alvoId]; if(!alvo) return false; if (logado.cargo === "regional") return alvo.regiao === logado.regiao || alvo.criadoPor === logado.id; if (logado.cargo === "supervisor") return alvo.criadoPor === logado.id; return false; }
 function mostrarToast(msg, tipo = "sucesso") { const container = document.getElementById("toast-container"); const toast = document.createElement("div"); toast.className = `toast ${tipo}`; let icon = '<i data-lucide="check-circle"></i>'; if(tipo === 'erro') icon = '<i data-lucide="x-circle"></i>'; if(tipo === 'alerta') icon = '<i data-lucide="info"></i>'; toast.innerHTML = icon + ' <span>' + msg.replace(/\n/g, '<br>') + '</span>'; container.appendChild(toast); loadIcons(); if(tipo === 'sucesso') vibrar(100); if(tipo === 'erro') vibrar([50, 50, 50]); setTimeout(() => toast.classList.add("show"), 10); setTimeout(() => { toast.classList.remove("show"); setTimeout(() => toast.remove(), 300); }, 3000); }
 function vibrar(padrao) { if(navigator.vibrate) navigator.vibrate(padrao); }
@@ -687,20 +704,13 @@ function realizarLogin() { const btn = document.getElementById("btn-login"); btn
 function abrirModalSenha() { document.getElementById('etapa-pergunta-senha').style.display = 'block'; document.getElementById('etapa-formulario-senha').style.display = 'none'; document.getElementById('modal-senha').classList.add('ativo'); }
 function responderTrocaSenha(q) { if(q) { document.getElementById('etapa-pergunta-senha').style.display = 'none'; document.getElementById('etapa-formulario-senha').style.display = 'block'; document.getElementById('nova-senha-1').value = ''; document.getElementById('nova-senha-2').value = ''; } else { localStorage.setItem('ignorar_troca_' + usuarioEditandoSenha, 'true'); fecharModalSenha(); entrarNoSistema(); } }
 function cancelarTrocaSenha() { localStorage.setItem('ignorar_troca_' + usuarioEditandoSenha, 'true'); fecharModalSenha(); entrarNoSistema(); }
-function salvarNovaSenha() { let s1 = document.getElementById('nova-senha-1').value.trim(); let s2 = document.getElementById('nova-senha-2').value.trim(); if (s1.length < 3 || s1 !== s2) return mostrarToast("Erro na senha!", "alerta"); bancoUsuarios[usuarioEditandoSenha].senha = s1; localStorage.setItem('ignorar_troca_' + usuarioEditandoSenha, 'true'); fecharModalSenha(); entrarNoSistema(); mostrarToast("Senha alterada! Clique no 'Memory Card' no topo para salvar no banco.", "sucesso"); }
+function salvarNovaSenha() { let s1 = document.getElementById('nova-senha-1').value.trim(); let s2 = document.getElementById('nova-senha-2').value.trim(); if (s1.length < 3 || s1 !== s2) return mostrarToast("Erro na senha!", "alerta"); bancoUsuarios[usuarioEditandoSenha].senha = s1; localStorage.setItem('ignorar_troca_' + usuarioEditandoSenha, 'true'); fecharModalSenha(); entrarNoSistema(); mostrarToast("Senha alterada!", "sucesso"); salvarConfiguracoesGlobais(false); }
 function fecharModalSenha() { document.getElementById('modal-senha').classList.remove('ativo'); }
 
-function entrarNoSistema() { try { let nomeSeguro = usuarioLogado.nome || usuarioLogado.id || "Usuário"; let elNome = document.getElementById('nome-usuario'); if(elNome) elNome.value = ""; let elSenha = document.getElementById('senha-usuario'); if(elSenha) elSenha.value = ""; let perm = usuarioLogado.permissoes; if (typeof perm === 'string') { try { perm = JSON.parse(perm); } catch(e) { perm = { vendas: true, acomp: true, estoque_ver: true, estoque_editar: true }; } } if (!perm || typeof perm !== 'object') { perm = { vendas: true, acomp: true, estoque_ver: true, estoque_editar: true }; } let adminRole = (usuarioLogado.cargo === "gestor" || usuarioLogado.cargo === "regional" || usuarioLogado.id === "master" || usuarioLogado.cargo === "supervisor"); let hGlobal = document.getElementById('header-global'); if(hGlobal) hGlobal.style.display = 'flex'; let hNome = document.getElementById('header-nome'); if(hNome) hNome.innerText = nomeSeguro; let hAvatar = document.getElementById('header-avatar'); if(hAvatar) hAvatar.innerText = String(nomeSeguro).charAt(0).toUpperCase(); let btnDash = document.getElementById('btn-dashboard'); if(btnDash) btnDash.style.display = "flex"; let btnHist = document.getElementById('btn-menu-historico'); if(btnHist) btnHist.style.display = adminRole ? "flex" : "none"; let btnAud = document.getElementById('btn-menu-auditoria'); if(btnAud) btnAud.style.display = adminRole ? "flex" : "none"; let btnVenda = document.getElementById('btn-menu-venda'); if(btnVenda) btnVenda.style.display = (adminRole && usuarioLogado.cargo !== "supervisor" && !perm.vendas) ? "none" : "flex"; let bNav = document.getElementById('bottom-nav-bar'); if(bNav) bNav.classList.add('ativa'); let navVenda = document.getElementById('nav-venda'); if(navVenda) navVenda.style.display = (adminRole && usuarioLogado.cargo !== "supervisor" && !perm.vendas) ? "none" : (perm.vendas ? "flex" : "none"); let navAcomp = document.getElementById('nav-acomp'); if(navAcomp) navAcomp.style.display = (adminRole || perm.acomp) ? "flex" : "none"; let navEst = document.getElementById('nav-estoque'); if(navEst) navEst.style.display = (adminRole || perm.estoque_ver) ? "flex" : "none"; let navAdmin = document.getElementById('nav-admin'); if(navAdmin) navAdmin.style.display = adminRole ? "flex" : "none"; let btnNovoMural = document.getElementById('btn-novo-mural'); if(btnNovoMural) btnNovoMural.style.display = adminRole ? "flex" : "none"; renderizarMural(); let navHome = document.getElementById('nav-home'); if (navHome) { navTo('tela-menu', navHome); } else { mudarTela('tela-menu'); } } catch (err) { console.error("Erro interno no entrarNoSistema:", err); mudarTela('tela-menu'); } }
+function entrarNoSistema() { try { let nomeSeguro = usuarioLogado.nome || usuarioLogado.id || "Usuário"; let elNome = document.getElementById('nome-usuario'); if(elNome) elNome.value = ""; let elSenha = document.getElementById('senha-usuario'); if(elSenha) elSenha.value = ""; let perm = usuarioLogado.permissoes; if (typeof perm === 'string') { try { perm = JSON.parse(perm); } catch(e) { perm = { vendas: true, acomp: true, estoque_ver: true, estoque_editar: true }; } } if (!perm || typeof perm !== 'object') { perm = { vendas: true, acomp: true, estoque_ver: true, estoque_editar: true }; } let adminRole = (usuarioLogado.cargo === "gestor" || usuarioLogado.cargo === "regional" || usuarioLogado.id === "master" || usuarioLogado.cargo === "supervisor"); let hGlobal = document.getElementById('header-global'); if(hGlobal) hGlobal.style.display = 'flex'; let hNome = document.getElementById('header-nome'); if(hNome) hNome.innerText = nomeSeguro; let hAvatar = document.getElementById('header-avatar'); if(hAvatar) hAvatar.innerText = String(nomeSeguro).charAt(0).toUpperCase(); let btnDash = document.getElementById('btn-dashboard'); if(btnDash) btnDash.style.display = "flex"; let btnHist = document.getElementById('btn-menu-historico'); if(btnHist) btnHist.style.display = adminRole ? "flex" : "none"; let btnAud = document.getElementById('btn-menu-auditoria'); if(btnAud) btnAud.style.display = adminRole ? "flex" : "none"; let btnVenda = document.getElementById('btn-menu-venda'); if(btnVenda) btnVenda.style.display = (adminRole && usuarioLogado.cargo !== "supervisor" && !perm.vendas) ? "none" : "flex"; let bNav = document.getElementById('bottom-nav-bar'); if(bNav) bNav.classList.add('ativa'); let navVenda = document.getElementById('nav-venda'); if(navVenda) navVenda.style.display = (adminRole && usuarioLogado.cargo !== "supervisor" && !perm.vendas) ? "none" : (perm.vendas ? "flex" : "none"); let navAcomp = document.getElementById('nav-acomp'); if(navAcomp) navAcomp.style.display = (adminRole || perm.acomp) ? "flex" : "none"; let navEst = document.getElementById('nav-estoque'); if(navEst) navEst.style.display = (adminRole || perm.estoque_ver) ? "flex" : "none"; let navAdmin = document.getElementById('nav-admin'); if(navAdmin) navAdmin.style.display = adminRole ? "flex" : "none"; let navHome = document.getElementById('nav-home'); if (navHome) { navTo('tela-menu', navHome); } else { mudarTela('tela-menu'); } } catch (err) { console.error("Erro interno no entrarNoSistema:", err); mudarTela('tela-menu'); } }
 function fazerLogout() { usuarioLogado = null; document.getElementById('bottom-nav-bar').classList.remove('ativa'); document.getElementById('header-global').style.display = 'none'; mudarTela('tela-login'); }
 
 function irParaVendas() { let adminRole = (usuarioLogado.cargo === "gestor" || usuarioLogado.cargo === "regional" || usuarioLogado.id === "master" || usuarioLogado.cargo === "supervisor"); if (adminRole) { let promotoresDele = Object.keys(bancoUsuarios).filter(k => bancoUsuarios[k].cargo === "promotor" && podeGerenciar(usuarioLogado, k)); if(promotoresDele.length === 0) return mostrarToast("Você não possui promotores vinculados.", "alerta"); montarBotoesPromotores(promotoresDele); mudarTela('tela-promotores'); } else { let lojas = usuarioLogado.lojasPermitidas || []; if(lojas.length === 0) return mostrarToast("Você não possui lojas vinculadas.", "alerta"); if(lojas.length === 1) selecionarLoja(lojas[0]); else { montarBotoesLojas(lojas); mudarTela('tela-lojas'); } } }
-
-function renderizarMural() { const div = document.getElementById('container-mural'); if (!muralGlobal || muralGlobal.length === 0) { div.innerHTML = `<span style="font-size: 13px; color: var(--cor-secundaria); font-style: italic;">Nenhum comunicado no momento.</span>`; return; } let html = ""; let adminRole = (usuarioLogado.cargo === "supervisor" || usuarioLogado.cargo === "regional" || usuarioLogado.cargo === "gestor" || usuarioLogado.id === "master"); muralGlobal.forEach((post, index) => { let btnExcluir = adminRole ? `<button class="btn-delete-mural" onclick="excluirMural(${index})"><i data-lucide="trash-2" class="lucide-sm" style="margin:0;"></i></button>` : ""; html += `<div class="mural-post">${btnExcluir}<div class="mural-header"><div><div class="mural-title"><i data-lucide="info"></i> ${post.titulo}</div><div class="mural-author">Por: ${post.autor}</div></div><div class="mural-date">${post.data}</div></div><div class="mural-body">${post.mensagem}</div></div>`; }); div.innerHTML = html; loadIcons(); }
-function abrirModalMural() { document.getElementById('mural-titulo').value = ""; document.getElementById('mural-mensagem').value = ""; document.getElementById('modal-mural').classList.add('ativo'); }
-function fecharModalMural() { document.getElementById('modal-mural').classList.remove('ativo'); }
-function publicarMural() { let titulo = document.getElementById('mural-titulo').value.trim(); let msg = document.getElementById('mural-mensagem').value.trim(); if(!titulo || !msg) return mostrarToast("Preencha título e mensagem.", "alerta"); let hoje = new Date().toLocaleDateString('pt-BR'); muralGlobal.unshift({ titulo: titulo, mensagem: msg, autor: usuarioLogado.nome || usuarioLogado.id, data: hoje }); renderizarMural(); fecharModalMural(); salvarConfiguracoesGlobais(false); mostrarToast("Publicado no Mural!", "sucesso"); }
-function excluirMural(index) { if(confirm("Apagar este comunicado?")) { muralGlobal.splice(index, 1); renderizarMural(); salvarConfiguracoesGlobais(false); mostrarToast("Comunicado apagado.", "info"); } }
-
 function selecionarPromotor(obj) { let lojas = obj.lojasPermitidas || []; if(lojas.length === 0) { mostrarToast("Nenhuma loja vinculada.", "alerta"); return; } if (lojas.length === 1) selecionarLoja(lojas[0]); else { montarBotoesLojas(lojas); mudarTela('tela-lojas'); } }
 function montarBotoesPromotores(listaChaves) { const div = document.getElementById('botoes-promotores-dinamicos'); div.innerHTML = ""; if (!listaChaves || listaChaves.length === 0) { div.innerHTML = "<div class='mensagem-vazia'>Você não tem promotores na sua equipe.</div>"; return; } listaChaves.forEach(k => { let btn = document.createElement('button'); btn.className = "btn-sistema"; btn.innerHTML = `<i data-lucide="user" class="lucide-sm"></i> Equipe ${bancoUsuarios[k].nome || k}`; btn.onclick = () => selecionarPromotor(bancoUsuarios[k]); div.appendChild(btn); }); loadIcons(); }
 function montarBotoesLojas(arr) { const div = document.getElementById('botoes-lojas-dinamicos'); div.innerHTML = ""; let arrOrdenado = arr.sort((a, b) => a.localeCompare(b, undefined, {numeric: true, sensitivity: 'base'})); arrOrdenado.forEach(l => { let btn = document.createElement('button'); btn.className = "btn-sistema"; btn.innerHTML = `<i data-lucide="store" class="lucide-sm"></i> ${l}`; btn.onclick = () => selecionarLoja(l); div.appendChild(btn); }); loadIcons(); }
@@ -715,7 +725,7 @@ function atualizarTelaConferencia() { const div = document.getElementById("area-
 function limparPendentes() { emojisPendentes = []; atualizarTelaConferencia(); }
 
 async function enviarParaBanco() {
-    if (!navigator.onLine) { return mostrarToast("Sem internet! Conecte-se para registrar a venda.", "erro"); }
+    if (!navigator.onLine) { return mostrarToast("Você está sem internet! Conecte-se para registrar a venda.", "erro"); }
     if (vendedoresSelecionados.length === 0 || emojisPendentes.length === 0) return; 
     const v = vendedoresSelecionados.join(" e ");
     const btn = document.getElementById("btn-enviar-venda"); btn.disabled = true; btn.innerHTML = '<i data-lucide="loader-2" style="animation: spin 2s linear infinite;"></i> Enviando...'; loadIcons();
@@ -760,6 +770,7 @@ function alterarEstoque(loja, ap, delta, id) { let k = `${loja}|${ap}`; if (!pen
 
 function atualizarTelaConferenciaEstoque() { const div = document.getElementById("area-conferencia-estoque"); const lista = document.getElementById("lista-pendentes-estoque"); const btnOk = document.getElementById('container-btn-conferencia-ok'); let html = ""; let tem = false; for (let k in pendenciasEstoque) { let p = pendenciasEstoque[k]; if (p.deltaTotal !== 0) { tem = true; html += `<div style="background: var(--bg-container); border: 1px solid var(--border-color); padding: 12px; border-radius: 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; font-size: 13px;"><span>📍 [${p.loja}] ${p.aparelho}</span><span>De: <strong>${p.qtdOriginal}</strong> ➔ Para: <span style="color: var(--primary); font-weight: bold;">${p.novaQtd} un</span></span></div>`; } } if (tem) { div.style.display = "block"; lista.innerHTML = html; if(btnOk) btnOk.style.display = "none"; } else { div.style.display = "none"; lista.innerHTML = ""; let hoje = new Date().toLocaleDateString('pt-BR'); let ultima = localStorage.getItem('ultimaConferencia_' + usuarioLogado.id); if (usuarioLogado.cargo === "promotor" && ultima !== hoje) { if(btnOk) btnOk.style.display = "block"; } else { if(btnOk) btnOk.style.display = "none"; } } }
 
+async function confirmarEstoqueSemAlteracao() { if (!navigator.onLine) { return mostrarToast("Sem internet para confirmar.", "erro"); } let btn = document.querySelector('#container-btn-conferencia-ok button'); let textoOriginal = btn.innerHTML; btn.innerHTML = '<i data-lucide="loader-2" class="lucide-sm" style="animation: spin 1s linear infinite;"></i> Confirmando...'; btn.disabled = true; loadIcons(); let payload = { tipo: "estoque", loja: "Geral", aparelho: "Conferência Diária", motivo: "Estoque físico bate com o sistema (OK)", delta: 0, promotor: usuarioLogado.id }; try { await fetch(URL_DA_SUA_API, { method: "POST", body: JSON.stringify(payload), headers: { "Content-Type": "text/plain" } }); localStorage.setItem('ultimaConferencia_' + usuarioLogado.id, new Date().toLocaleDateString('pt-BR')); mostrarToast("Conferência registrada com sucesso!", "sucesso"); atualizarTelaConferenciaEstoque(); } catch (e) { mostrarToast("Erro de rede ao confirmar.", "erro"); btn.innerHTML = textoOriginal; btn.disabled = false; loadIcons(); } }
 function limparConferenciaEstoque() { renderizarListaEstoque(); }
 function verificarMotivoEstoque() { let chaves = Object.keys(pendenciasEstoque).filter(k => pendenciasEstoque[k].deltaTotal !== 0); if (chaves.length === 0) return; let adminRole = (usuarioLogado.cargo === "supervisor" || usuarioLogado.cargo === "regional" || usuarioLogado.cargo === "gestor" || usuarioLogado.id === "master"); if (adminRole) { executarEnvioEstoque("Ajuste Gerencial"); } else { document.getElementById('modal-motivo-estoque').classList.add('ativo'); } }
 function confirmarEnvioEstoqueMotivo() { document.getElementById('modal-motivo-estoque').classList.remove('ativo'); let motivoSelecionado = document.getElementById('select-motivo-estoque').value; executarEnvioEstoque(motivoSelecionado); }
@@ -824,10 +835,22 @@ function forcarAtualizacaoDashboard() { mostrarToast("Buscando dados...", "info"
 function atualizarFiltroPromotorDash() { let selSup = document.getElementById('filtro-supervisor-dash').value; let selProm = document.getElementById('filtro-promotor-dash'); let promotorAtual = selProm.value; let htmlOp = '<option value="todos">Todos da Equipe</option>'; let supAlvo = (usuarioLogado.cargo === "supervisor") ? usuarioLogado.id : selSup; if (supAlvo && supAlvo !== "todos") { for(let k in bancoUsuarios) { if (bancoUsuarios[k].cargo === "promotor" && bancoUsuarios[k].criadoPor === supAlvo) { htmlOp += `<option value="${k}">${bancoUsuarios[k].nome || k}</option>`; } } } selProm.innerHTML = htmlOp; if (Array.from(selProm.options).some(opt => opt.value === promotorAtual)) { selProm.value = promotorAtual; } }
 function mudouSupervisorDash() { atualizarFiltroPromotorDash(); abrirDashboard(); }
 
-// BOTÃO DA COMISSÃO (ATALHO)
 function clicouAjusteComissao(event) { event.stopPropagation(); let adminRole = (usuarioLogado.cargo === "supervisor" || usuarioLogado.cargo === "regional" || usuarioLogado.cargo === "gestor" || usuarioLogado.id === "master"); if (adminRole) { abrirAdmin(); document.getElementById('btn-tab-regras').click(); } else { abrirInfoComissaoPromotor(); } }
+
 function abrirInfoComissaoPromotor() {
-    if(!window.metricasAtuais) return mostrarToast("Dados não calculados.", "alerta"); let m = window.metricasAtuais[usuarioLogado.nome] || window.metricasAtuais[usuarioLogado.id]; if(!m) m = { realizadoGeral: 0, realizadoPremium: 0 };
+    if(!window.metricasAtuais) {
+        // Correção aqui: Se não tiver calculado ainda, force a busca local antes de mostrar o erro
+        if (dadosAcompanhamentoGlobal.length > 0) {
+            gerarGraficos(dadosAcompanhamentoGlobal);
+        } else {
+            return mostrarToast("Carregue os dados primeiro.", "alerta");
+        }
+    }
+    
+    // Agora busca as métricas salvas
+    let m = window.metricasAtuais[usuarioLogado.nome] || window.metricasAtuais[usuarioLogado.id]; 
+    if(!m) m = { realizadoGeral: 0, realizadoPremium: 0 };
+    
     let supkey = bancoUsuarios[usuarioLogado.id].criadoPor || "geral"; let vComissaoSup = valoresComissao[supkey] || valoresComissao["geral"] || {}; let niveisGlobais = vComissaoSup.niveis || [{ id: 'l1', nome: 'L1', meta: 0 }, { id: 'l2', nome: 'L2', meta: 10 }]; let aparelhosCfg = vComissaoSup.aparelhos || vComissaoSup || {}; let vendas = m.realizadoGeral; let nivelAtual = niveisGlobais[0]; let proximoNivel = null;
     for(let i=0; i<niveisGlobais.length; i++) { if(vendas >= niveisGlobais[i].meta) { nivelAtual = niveisGlobais[i]; proximoNivel = niveisGlobais[i+1] || null; } }
     let html = `<div style="text-align:left; color:var(--cor-texto);"><div style="background:var(--bg-item); padding:15px; border-radius:12px; margin-bottom:15px; border:1px solid var(--primary);"><h4 style="color:var(--primary); margin-bottom:5px; margin-top:0;">Nível: ${nivelAtual.nome}</h4><p style="margin:0; font-size:13px; font-weight:bold;">Vendas: ${vendas} un</p>`;
@@ -844,7 +867,7 @@ function abrirDashboard() {
     if (document.getElementById('filtro-promotor-dash').options.length <= 1) { atualizarFiltroPromotorDash(); }
     document.getElementById("total-comissao-geral").innerText = "R$ ****"; document.getElementById("icone-olho-comissao").innerHTML = '<i data-lucide="eye" style="margin:0;"></i>'; loadIcons();
     const selDash = document.getElementById("seletor-mes-dash"); let url = URL_DA_SUA_API + (selDash && selDash.value ? "?mes=" + encodeURIComponent(selDash.value) : ""); document.getElementById("total-vendas-geral").innerText = "..."; 
-    fetch(url).then(r => { if (!r.ok) throw new Error(); return r.json(); }).then(res => { if (res.status === "sucesso") { dadosAcompanhamentoGlobal = res.dados || []; gerarGraficos(dadosAcompanhamentoGlobal); } else { document.getElementById("total-vendas-geral").innerText = "Erro!"; } }).catch(e => { document.getElementById("total-vendas-geral").innerText = "0 un"; mostrarBotaoReconexao(); }).finally(() => { let icone = document.getElementById('icon-refresh-dash'); if(icone) icone.style.animation = "none"; loadIcons(); });
+    fetch(url).then(r => { if (!r.ok) throw new Error("Erro"); return r.json(); }).then(res => { if (res.status === "sucesso") { dadosAcompanhamentoGlobal = res.dados || []; gerarGraficos(dadosAcompanhamentoGlobal); } else { document.getElementById("total-vendas-geral").innerText = "Erro!"; } }).catch(e => { document.getElementById("total-vendas-geral").innerText = "0 un"; mostrarBotaoReconexao(); }).finally(() => { let icone = document.getElementById('icon-refresh-dash'); if(icone) icone.style.animation = "none"; loadIcons(); });
 }
 function toggleComissao(event) { if(event) event.stopPropagation(); let elComissao = document.getElementById("total-comissao-geral"); let iconeOlho = document.getElementById("icone-olho-comissao"); if (elComissao.innerText === "R$ ****") { elComissao.innerText = elComissao.dataset.valor || "R$ 0,00"; iconeOlho.innerHTML = '<i data-lucide="eye-off" style="margin:0;"></i>'; } else { elComissao.innerText = "R$ ****"; iconeOlho.innerHTML = '<i data-lucide="eye" style="margin:0;"></i>'; } loadIcons(); }
 function isCampaignActiveInMonth(startStr, endStr, mesSelecionado) { if (!startStr && !endStr) return true; let partes = mesSelecionado.split('/'); if(partes.length < 2) return true; let m = parseInt(partes[0], 10); let y = parseInt(partes[1], 10); let dtStart = startStr ? new Date(startStr + "T00:00:00") : new Date(2000, 0, 1); let dtEnd = endStr ? new Date(endStr + "T23:59:59") : new Date(2100, 0, 1); let startOfMonth = new Date(y, m - 1, 1); let endOfMonth = new Date(y, m, 0, 23, 59, 59); return dtStart <= endOfMonth && dtEnd >= startOfMonth; }
@@ -943,7 +966,7 @@ function adminAddAparelho() { let n = document.getElementById('admin-aparelho-no
 async function salvarConfiguracoesGlobais(mostrarAviso = true) {
     if (!navigator.onLine) { return mostrarToast("Sem conexão. Tente novamente mais tarde.", "erro"); }
     let btnSalvarHeader = document.querySelectorAll('.btn-save-memory'); btnSalvarHeader.forEach(btn => { btn.innerHTML = '<i data-lucide="loader-2" style="animation: spin 1s linear infinite;"></i>'; }); loadIcons();
-    let payload = { tipo: "salvar_config", configuracoes: { bancoUsuarios: bancoUsuarios, lojasConfig: lojasConfig, mapaEmojis: mapaEmojis, aparelhosPremium: aparelhosPremium, taxasCoparticipacao: taxasCoparticipacao, valoresComissao: valoresComissao, mural: muralGlobal } };
+    let payload = { tipo: "salvar_config", configuracoes: { bancoUsuarios: bancoUsuarios, lojasConfig: lojasConfig, mapaEmojis: mapaEmojis, aparelhosPremium: aparelhosPremium, taxasCoparticipacao: taxasCoparticipacao, valoresComissao: valoresComissao } };
     try { await fetch(URL_DA_SUA_API, { method: "POST", body: JSON.stringify(payload), headers: { "Content-Type": "text/plain" } }); if(mostrarAviso) mostrarToast("Salvo com sucesso!", "sucesso"); } catch (e) { if(mostrarAviso) mostrarToast("Erro de rede.", "erro"); } finally { btnSalvarHeader.forEach(btn => { btn.innerHTML = '<i data-lucide="save"></i> Salvar'; }); loadIcons(); }
 }
 
@@ -952,9 +975,9 @@ function renderizarInputsFoco() {
     let supId = selSup.value; let premiumSup = aparelhosPremium[supId] || aparelhosPremium["geral"] || {}; let taxaSup = taxasCoparticipacao[supId] || taxasCoparticipacao["geral"] || 25; let vComissaoSup = valoresComissao[supId] || valoresComissao["geral"] || {}; let aparelhosCfg = vComissaoSup.aparelhos || vComissaoSup || {}; let niveisGlobais = vComissaoSup.niveis || [{ id: 'l1', nome: 'L1', meta: 0 }, { id: 'l2', nome: 'L2', meta: 10 }]; let campanhasAtivas = vComissaoSup.campanhasPersonalizadas || [];
     document.getElementById('input-taxa-copart').value = taxaSup;
     let htmlNiveis = `<div style="background:var(--bg-item); padding:20px; border-radius:16px; margin-top:20px;"><div style="display:flex; justify-content:space-between; margin-bottom:10px;"><strong style="color:#8b5cf6;">Níveis de Comissão</strong><button class="btn-acao btn-enviar" style="background:#8b5cf6;" onclick="adicionarNivelGlobal()">Novo Nível</button></div><div style="display:flex; flex-direction:column; gap:10px;">`;
-    niveisGlobais.forEach((nv, idx) => { htmlNiveis += `<div style="display:flex; align-items:center; gap:10px; background:var(--bg-container); padding:10px; border-radius:12px;"><span style="color:var(--primary); font-weight:bold;">${nv.nome}:</span><span>Meta:</span><input type="number" class="config-nivel-meta" value="${nv.meta}" style="width:80px; margin:0;" onchange="atualizarListaPremiumGlobal()">${idx > 0 ? `<button class="btn-excluir" onclick="removerNivelGlobal('${nv.id}')"><i data-lucide="x"></i></button>` : ''}</div>`; }); htmlNiveis += `</div></div>`;
+    niveisGlobais.forEach((nv, idx) => { htmlNiveis += `<div class="linha-nivel-config" data-id="${nv.id}" style="display:flex; align-items:center; gap:10px; background:var(--bg-container); padding:10px; border-radius:12px;"><span style="color:var(--primary); font-weight:bold;">${nv.nome}:</span><span>Meta:</span><input type="number" class="config-nivel-meta" value="${nv.meta}" style="width:80px; margin:0;" onchange="atualizarListaPremiumGlobal()">${idx > 0 ? `<button class="btn-excluir" onclick="removerNivelGlobal('${nv.id}')"><i data-lucide="x"></i></button>` : ''}</div>`; }); htmlNiveis += `</div></div>`;
     let htmlCampanhas = `<div style="background:var(--bg-item); padding:20px; border-radius:16px; margin-top:20px;"><div style="display:flex; justify-content:space-between; margin-bottom:10px;"><strong style="color:#f59e0b;">Bônus Extra</strong><button class="btn-acao btn-enviar" style="background:#f59e0b;" onclick="adicionarLinhaCampanha()">Nova Regra</button></div><div style="display:flex; flex-direction:column; gap:12px;">`;
-    campanhasAtivas.forEach((camp, index) => { let optionsAparelhos = '<option value="todos">Qualquer Aparelho</option>'; for (let ap in mapaEmojis) { let sel = camp.aparelho === ap ? "selected" : ""; optionsAparelhos += `<option value="${ap}" ${sel}>${mapaEmojis[ap]} ${ap.toUpperCase()}</option>`; } let optionsPromotores = '<option value="todos">Toda a Equipe</option>'; for (let pk in bancoUsuarios) { if (bancoUsuarios[pk].cargo === "promotor" && (supId === 'geral' || bancoUsuarios[pk].criadoPor === supId)) { let selP = (camp.promotorAlvo === pk) ? "selected" : ""; optionsPromores += `<option value="${pk}" ${selP}>👤 ${(bancoUsuarios[pk].nome || pk)}</option>`; } } htmlCampanhas += `<div style="background:var(--bg-container); padding:15px; border-radius:12px; display:flex; flex-direction:column; gap:10px;"><div style="display:flex; gap:10px;"><select class="camp-aparelho" style="margin:0; flex:1;" onchange="atualizarListaPremiumGlobal()">${optionsAparelhos}</select><select class="camp-promotor" style="margin:0; flex:1;" onchange="atualizarListaPremiumGlobal()">${optionsPromotores}</select><button class="btn-excluir" onclick="removerLinhaCampanha(${index})"><i data-lucide="trash-2"></i></button></div><div style="display:flex; gap:10px;"><div style="flex:1;">Qtd Min.<input type="number" class="camp-qtd" value="${camp.qtdMinima || 1}" style="margin:0;" onchange="atualizarListaPremiumGlobal()"></div><div style="flex:1;">Bônus(R$)<input type="number" class="camp-valor" value="${camp.bonus || 0}" style="margin:0;" onchange="atualizarListaPremiumGlobal()"></div></div></div>`; }); htmlCampanhas += `</div></div>`;
+    campanhasAtivas.forEach((camp, index) => { let optionsAparelhos = '<option value="todos">Qualquer Aparelho</option>'; for (let ap in mapaEmojis) { let sel = camp.aparelho === ap ? "selected" : ""; optionsAparelhos += `<option value="${ap}" ${sel}>${mapaEmojis[ap]} ${ap.toUpperCase()}</option>`; } let optionsPromotores = '<option value="todos">Toda a Equipe</option>'; for (let pk in bancoUsuarios) { if (bancoUsuarios[pk].cargo === "promotor" && (supId === 'geral' || bancoUsuarios[pk].criadoPor === supId)) { let selP = (camp.promotorAlvo === pk) ? "selected" : ""; optionsPromotores += `<option value="${pk}" ${selP}>👤 ${(bancoUsuarios[pk].nome || pk)}</option>`; } } htmlCampanhas += `<div class="linha-campanha-dinamica" style="background:var(--bg-container); padding:15px; border-radius:12px; display:flex; flex-direction:column; gap:10px;"><div style="display:flex; gap:10px;"><select class="camp-aparelho" style="margin:0; flex:1;" onchange="atualizarListaPremiumGlobal()">${optionsAparelhos}</select><select class="camp-promotor" style="margin:0; flex:1;" onchange="atualizarListaPremiumGlobal()">${optionsPromotores}</select><button class="btn-excluir" onclick="removerLinhaCampanha(${index})"><i data-lucide="trash-2"></i></button></div><div style="display:flex; gap:10px;"><div style="flex:1;">Qtd Min.<input type="number" class="camp-qtd" value="${camp.qtdMinima || 1}" style="margin:0;" onchange="atualizarListaPremiumGlobal()"></div><div style="flex:1;">Bônus(R$)<input type="number" class="camp-valor" value="${camp.bonus || 0}" style="margin:0;" onchange="atualizarListaPremiumGlobal()"></div></div></div>`; }); htmlCampanhas += `</div></div>`;
     let htmlAparelhos = `<div style="margin-top:25px; margin-bottom:15px; font-weight:bold;">Valores e Metas por Aparelho:</div><div style="display:flex; flex-direction:column; gap:15px;">`;
     for (let ap in mapaEmojis) { let isFoco = premiumSup[ap] ? "checked": ""; let cfg = aparelhosCfg[ap] || {}; let isComissionado = (cfg.comissionado !== false && cfg.comissionado !== "false") ? "checked": ""; let inputsNiveisHtml = `<div id="box-comissao-${ap}" style="display: ${isComissionado ? 'flex': 'none'}; gap:10px; overflow-x:auto;">`; niveisGlobais.forEach(nv => { let v = cfg[nv.id] !== undefined ? cfg[nv.id] : 0; let metaEspec = cfg[nv.id + '_meta'] !== undefined ? cfg[nv.id + '_meta'] : nv.meta; inputsNiveisHtml += `<div style="background:var(--bg-item); padding:10px; border-radius:12px; min-width:110px;"><strong style="color:var(--primary);">${nv.nome}</strong><br><span style="font-size:11px;">R$:</span><input type="number" class="input-comissao-nivel" data-ap="${ap}" data-lvl="${nv.id}" value="${v}" style="width:100%; padding:8px; margin:4px 0;" onchange="atualizarListaPremiumGlobal()"><span style="font-size:11px;">Meta:</span><input type="number" class="input-meta-nivel" data-ap="${ap}" data-lvl="${nv.id}" value="${metaEspec}" style="width:100%; padding:8px; margin:4px 0 0 0;" onchange="atualizarListaPremiumGlobal()"></div>`; }); inputsNiveisHtml += `</div>`; htmlAparelhos += `<div style="background:var(--bg-card); padding:15px; border-radius:16px;"><strong>${mapaEmojis[ap]} ${ap.toUpperCase()}</strong><div style="display:flex; gap:15px; margin:10px 0;"><label><input type="checkbox" class="check-foco-aparelho" value="${ap}" ${isFoco} onchange="atualizarListaPremiumGlobal()"> Foco</label><label><input type="checkbox" class="check-comissao-aparelho" value="${ap}" ${isComissionado} onchange="toggleVisibilidadeComissao(this, '${ap}')"> Comissionado</label></div>${inputsNiveisHtml}</div>`; } htmlAparelhos += `</div>`;
     container.innerHTML = htmlNiveis + htmlCampanhas + htmlAparelhos; loadIcons();
@@ -996,7 +1019,6 @@ function atualizarListaPremiumGlobal() {
     valoresComissao[supId].campanhasPersonalizadas = campanhasAtualizadas;
 }
 
-function getLojasDaRegiao(supId) { let lojas = []; for(let l in lojasConfig) { if(lojasConfig[l].supervisor === supId || supId === "master" || usuarioLogado.cargo === "gestor") { lojas.push(l); } } return lojas.sort(); }
 function fecharModalEdicao() { document.getElementById('modal-edicao').classList.remove('ativo'); }
 
 function adminAbrirModalSenha(login) {
@@ -1068,6 +1090,32 @@ function adminAbrirModalLojas(login) {
     btn.onclick = function() { let selecionadas = Array.from(document.querySelectorAll('.edit-loja-check:checked')).map(cb => cb.value); bancoUsuarios[login].lojasPermitidas = selecionadas; mostrarToast("Lojas atualizadas!", "sucesso"); fecharModalEdicao(); if (document.getElementById('modal-gerenciar-equipe').classList.contains('ativo')) renderizarModalEquipe(); };
     document.getElementById('modal-edicao').classList.add('ativo'); loadIcons();
 }
+
+function baixarRelatorioAcomp() {
+    if (!dadosAcompanhamentoGlobal || dadosAcompanhamentoGlobal.length === 0) return mostrarToast("Nenhum dado para exportar.", "alerta");
+    mostrarToast("Gerando Excel...", "info");
+    let csvContent = "\uFEFF"; 
+    let colunas = Object.keys(dadosAcompanhamentoGlobal[0]);
+    csvContent += colunas.join(";") + "\n";
+    dadosAcompanhamentoGlobal.forEach(row => {
+        let linha = colunas.map(col => { let valor = row[col] !== null && row[col] !== undefined ? String(row[col]) : ""; valor = valor.replace(/\r?\n|\r/g, " "); return `"${valor.replace(/"/g, '""')}"`; });
+        csvContent += linha.join(";") + "\n";
+    });
+    let blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }); let url = URL.createObjectURL(blob); let link = document.createElement("a"); link.setAttribute("href", url); let mesAtual = document.getElementById("seletor-mes").value || "Atual"; link.setAttribute("download", `Relatorio_OPPO_${mesAtual.replace('/', '-')}.csv`); document.body.appendChild(link); link.click(); document.body.removeChild(link); mostrarToast("Download concluído!", "sucesso");
+}
+
+function baixarRelatorioHistorico() {
+    if (!dadosHistoricoGlobal || dadosHistoricoGlobal.length === 0) return mostrarToast("Nenhum dado para exportar.", "alerta");
+    mostrarToast("Gerando Excel...", "info");
+    let csvContent = "\uFEFF"; let colunas = Object.keys(dadosHistoricoGlobal[0]); csvContent += colunas.join(";") + "\n";
+    dadosHistoricoGlobal.forEach(row => {
+        let linha = colunas.map(col => { let valor = row[col] !== null && row[col] !== undefined ? String(row[col]) : ""; valor = valor.replace(/\r?\n|\r/g, " "); return `"${valor.replace(/"/g, '""')}"`; });
+        csvContent += linha.join(";") + "\n";
+    });
+    let blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }); let url = URL.createObjectURL(blob); let link = document.createElement("a"); link.setAttribute("href", url); link.setAttribute("download", `Historico_OPPO.csv`); document.body.appendChild(link); link.click(); document.body.removeChild(link); mostrarToast("Download concluído!", "sucesso");
+}
+
+if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('./sw.js').then(reg => {}).catch(err => {}); }); }
 </script>
 </body>
 </html>
