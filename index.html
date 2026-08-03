@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta name="google-site-verification: google832ba4a2575b8e39.html" />
+<meta name="google-site-verification" content="ewrATtfD22EbcqkiZi9SmG1uXilf_scWRvj9kD2Ct7Q" />
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Portal OPPO - Premium</title>
@@ -657,47 +657,94 @@ let dadosHistoricoGlobal = []; let dadosAcompanhamentoGlobal = [];
 let supervisorGerenciadoAtual = null; let mostruariosGlobais = JSON.parse(localStorage.getItem('mostruariosGlobais')) || {}; 
 let tipoHistoricoAtual = 'geral'; let mostruarioEmEdicao = null; let vendaParaCancelar = null;
 
-window.addEventListener('offline', () => { mostrarBotaoReconexao(); });
-window.addEventListener('online', () => { tentarReconectarAgora(); });
+window.addEventListener('offline', () => { 
+    // Em vez de travar a tela com o erro vermelho, apenas avisa que a rede oscilou
+    mostrarToast("Conexão instável...", "alerta"); 
+});
+window.addEventListener('online', () => { 
+    ocultarBotaoReconexao(); 
+    tentarReconectarAgora(); 
+});
 
 document.addEventListener('DOMContentLoaded', () => {
     loadIcons();
+    
+    // AUMENTAMOS PARA 20 SEGUNDOS (O Google pode ser lento para "acordar")
     let tempoEsgotado = setTimeout(() => {
-        if (document.getElementById('tela-loading').style.display !== 'none') {
+        let elLoading = document.getElementById('tela-loading');
+        if (elLoading && elLoading.style.display !== 'none') {
             bancoUsuarios = fallbackUsuarios; lojasConfig = fallbackLojas; mapaEmojis = fallbackEmojis; aparelhosPremium = fallbackPremium;
-            document.getElementById('tela-loading').style.display = 'none'; mudarTela('tela-login');
-            mostrarToast("Sem conexão com o servidor.", "alerta"); mostrarBotaoReconexao();
+            elLoading.style.display = 'none'; mudarTela('tela-login');
+            mostrarToast("O servidor está demorando a responder.", "alerta");
+            if(!navigator.onLine) mostrarBotaoReconexao();
         }
-    }, 8000);
+    }, 20000); 
 
-    fetch(URL_DA_SUA_API + "?acao=config", { redirect: "follow" }).then(r => r.json()).then(res => {
+    fetch(URL_DA_SUA_API + "?acao=config", { redirect: "follow" })
+    .then(r => {
+        if(!r.ok) throw new Error("Erro na resposta");
+        ocultarBotaoReconexao(); // Esconde erro se conectou
+        return r.json();
+    })
+    .then(res => {
         clearTimeout(tempoEsgotado); 
+        let elLoading = document.getElementById('tela-loading');
         if (res.status === "sucesso" && res.configuracoes) {
-            bancoUsuarios = res.configuracoes.bancoUsuarios || fallbackUsuarios; lojasConfig = res.configuracoes.lojasConfig || {}; mapaEmojis = res.configuracoes.mapaEmojis || {};
-            aparelhosPremium = res.configuracoes.aparelhosPremium || fallbackPremium; taxasCoparticipacao = res.configuracoes.taxasCoparticipacao || { "geral": 25 }; valoresComissao = res.configuracoes.valoresComissao || { "geral": {} };
+            bancoUsuarios = res.configuracoes.bancoUsuarios || fallbackUsuarios; 
+            lojasConfig = res.configuracoes.lojasConfig || {}; 
+            mapaEmojis = res.configuracoes.mapaEmojis || {};
+            aparelhosPremium = res.configuracoes.aparelhosPremium || fallbackPremium; 
+            taxasCoparticipacao = res.configuracoes.taxasCoparticipacao || { "geral": 25 }; 
+            valoresComissao = res.configuracoes.valoresComissao || { "geral": {} };
         }
         bancoUsuarios["master"] = { nome: "Diretor Master", senha: "Silva_9061", cargo: "master", meta: 0, lojasPermitidas: [] };
-        document.getElementById('tela-loading').style.display = 'none'; mudarTela('tela-login'); 
+        if(elLoading) elLoading.style.display = 'none'; mudarTela('tela-login'); 
     }).catch(err => {
-        clearTimeout(tempoEsgotado); bancoUsuarios = fallbackUsuarios;
-        document.getElementById('tela-loading').style.display = 'none'; mudarTela('tela-login');
-        mostrarToast("Erro ao conectar à nuvem.", "erro"); mostrarBotaoReconexao();
+        clearTimeout(tempoEsgotado); 
+        bancoUsuarios = fallbackUsuarios;
+        bancoUsuarios["master"] = { nome: "Diretor Master", senha: "Silva_9061", cargo: "master", meta: 0, lojasPermitidas: [] };
+        let elLoading = document.getElementById('tela-loading');
+        if(elLoading) elLoading.style.display = 'none'; mudarTela('tela-login');
+        mostrarToast("Erro ao conectar à nuvem.", "erro"); 
+        mostrarBotaoReconexao();
     });
 });
 
-function mostrarBotaoReconexao() { let painel = document.getElementById('painel-erro-conexao'); if (painel) painel.style.display = 'block'; loadIcons(); }
-function tentarReconectarAgora() {
-    mostrarToast("Tentando reconectar...", "info");
-    fetch(URL_DA_SUA_API + "?acao=config", { redirect: "follow" }).then(r => { if (!r.ok) throw new Error("Erro"); return r.json(); }).then(res => {
-        if (res.status === "sucesso") {
-            let painel = document.getElementById('painel-erro-conexao'); if (painel) painel.style.display = 'none'; mostrarToast("Conexão restabelecida!", "sucesso");
-            if (document.getElementById('tela-acompanhamento').classList.contains('ativa')) carregarDadosDoBanco();
-            else if (document.getElementById('tela-estoque').classList.contains('ativa')) carregarEstoqueDoBanco();
-            else if (document.getElementById('tela-historico').classList.contains('ativa')) carregarHistoricoDoBanco(true);
-        } else { throw new Error(); }
-    }).catch(err => { mostrarToast("Ainda sem conexão. Verifique sua rede.", "alerta"); });
+function mostrarBotaoReconexao() { 
+    let painel = document.getElementById('painel-erro-conexao'); 
+    if (painel) painel.style.display = 'block'; 
+    loadIcons(); 
 }
 
+function ocultarBotaoReconexao() { 
+    let painel = document.getElementById('painel-erro-conexao'); 
+    if (painel) painel.style.display = 'none'; 
+}
+
+function tentarReconectarAgora() {
+    ocultarBotaoReconexao(); // Oculta visualmente a tarja vermelha na hora
+    mostrarToast("Sincronizando...", "info");
+    
+    fetch(URL_DA_SUA_API + "?acao=config", { redirect: "follow" })
+    .then(r => { 
+        if (!r.ok) throw new Error("Erro"); 
+        return r.json(); 
+    })
+    .then(res => {
+        if (res.status === "sucesso") {
+            ocultarBotaoReconexao();
+            mostrarToast("Conexão restabelecida!", "sucesso");
+            if (document.getElementById('tela-acompanhamento')?.classList.contains('ativa')) carregarDadosDoBanco();
+            else if (document.getElementById('tela-estoque')?.classList.contains('ativa')) carregarEstoqueDoBanco();
+            else if (document.getElementById('tela-historico')?.classList.contains('ativa')) carregarHistoricoDoBanco(true);
+        } else { 
+            throw new Error(); 
+        }
+    }).catch(err => { 
+        mostrarToast("Ainda sem conexão. Verifique sua rede.", "alerta"); 
+        mostrarBotaoReconexao(); // Devolve a tarja vermelha se falhou de verdade
+    });
+}
 function podeGerenciar(logado, alvoId) {
     if (!logado) return false; if (logado.id === alvoId) return true; if (logado.id === "master" || logado.cargo === "master") return true;
     if (logado.cargo === "gestor") return true; let alvo = bancoUsuarios[alvoId]; if(!alvo) return false;
@@ -1291,29 +1338,54 @@ function gerarGraficos(dadosVendas) {
     });
 
     let mesFiltro = document.getElementById("seletor-mes-dash").value;
-function atualizarListaPremiumGlobal() {
-    let selSup = document.getElementById('seletor-foco-sup').value;
-    let taxaInputs = document.getElementById('input-taxa-copart'); if (taxaInputs) taxasCoparticipacao[selSup] = Number(taxaInputs.value);
-    
-    let pObj = {}; document.querySelectorAll('.check-foco-aparelho').forEach(cb => { if (cb.checked) pObj[cb.value] = 1; }); aparelhosPremium[selSup] = pObj;
-    if (!valoresComissao[selSup]) valoresComissao[selSup] = {};
-    
-    let campanhas = []; document.querySelectorAll('.linha-campanha-dinamica').forEach(bloco => { campanhas.push({ aparelho: bloco.querySelector('.camp-aparelho').value, promotorAlvo: bloco.querySelector('.camp-promotor').value, qtdMinima: Number(bloco.querySelector('.camp-qtd').value), bonus: Number(bloco.querySelector('.camp-valor').value) }); }); valoresComissao[selSup].campanhasPersonalizadas = campanhas;
-    
-    if(!valoresComissao[selSup].aparelhos) valoresComissao[selSup].aparelhos = {};
-    let cfgAp = valoresComissao[selSup].aparelhos;
+    Object.values(metricas).forEach(m => {
+        let comissaoUser = 0; let supkey = m.login; 
+        if (bancoUsuarios[m.login] && bancoUsuarios[m.login].cargo === "promotor") { supkey = bancoUsuarios[m.login].criadoPor; }
+        
+        let vComissaoSup = valoresComissao[supkey] || valoresComissao["geral"] || {}; 
+        let grupos = vComissaoSup.grupos || []; let aparelhosCfg = vComissaoSup.aparelhos || {}; let campanhasAtivas = vComissaoSup.campanhasPersonalizadas || [];
 
-    document.querySelectorAll('.ap-tipo-regra').forEach(sel => {
-         let ap = sel.getAttribute('data-ap'); let val = sel.value; if (!cfgAp[ap]) cfgAp[ap] = {};
-         if (val === 'nenhum') { cfgAp[ap] = { tipo: 'nenhum' }; } 
-         else if (val === 'fixo') { let inputFixo = document.querySelector(`.ap-valor-fixo[data-ap="${ap}"]`); cfgAp[ap] = { tipo: 'fixo', valorFixo: inputFixo ? Number(inputFixo.value) : 0 }; } 
-         else if (val.startsWith('grupo_')) { 
-              let gId = val.replace('grupo_', ''); cfgAp[ap] = { tipo: 'grupo', grupoId: gId, valores: {} };
-              // Busca e atrela o valor à meta do índice (0, 1)
-              document.querySelectorAll(`.ap-valor-grupo-nivel[data-ap="${ap}"]`).forEach(inp => { let nIdx = inp.getAttribute('data-nidx'); cfgAp[ap].valores[nIdx] = Number(inp.value); });
-         }
-    });
-}
+        let volumePorGrupo = {}; grupos.forEach(g => volumePorGrupo[g.id] = 0);
+        for(let modChave in m.modelosVendidosGeral) { 
+            let qtdMod = m.modelosVendidosGeral[modChave]; let cfg = aparelhosCfg[modChave] || { tipo: 'nenhum' }; 
+            if (cfg.tipo === 'grupo' && cfg.grupoId && volumePorGrupo[cfg.grupoId] !== undefined) { volumePorGrupo[cfg.grupoId] += qtdMod; } 
+        }
+
+        // LÓGICA DE CÁLCULO CORRIGIDA AQUI
+        for(let modChave in m.modelosVendidosGeral) { 
+            let qtdMod = m.modelosVendidosGeral[modChave]; let cfg = aparelhosCfg[modChave] || { tipo: 'nenhum' }; 
+            
+            if (cfg.tipo === 'fixo') { 
+                comissaoUser += (qtdMod * (Number(cfg.valorFixo) || 0)); 
+            } 
+            else if (cfg.tipo === 'grupo' && cfg.grupoId) {
+                let g = grupos.find(x => x.id === cfg.grupoId);
+                if (g && cfg.valores) {
+                    let volumeTotalGrupo = volumePorGrupo[cfg.grupoId] || 0; 
+                    let nivelAlcancadoIdx = null; 
+                    let maiorMeta = -1;
+                    
+                    g.niveis.forEach((nv, idx) => { 
+                        if (volumeTotalGrupo >= Number(nv.meta) && Number(nv.meta) >= maiorMeta) { 
+                            nivelAlcancadoIdx = idx; 
+                            maiorMeta = Number(nv.meta); 
+                        } 
+                    });
+                    
+                    if (nivelAlcancadoIdx !== null) { 
+                        let payout = Number(cfg.valores[nivelAlcancadoIdx]) || 0; 
+                        comissaoUser += (qtdMod * payout); 
+                    }
+                }
+            } 
+            else if (cfg.tipo === undefined && (cfg.comissionado === true || cfg.comissionado === 'true')) {
+                let niveisGlobais = vComissaoSup.niveis || [{ id: 'l1', meta: 0 }, { id: 'l2', meta: 10 }];
+                let nivelAlcancado = 'l1'; let maiorMeta = -1; 
+                niveisGlobais.forEach(nv => { let metaParaNivel = (cfg[nv.id + '_meta'] !== undefined && cfg[nv.id + '_meta'] !== "") ? Number(cfg[nv.id + '_meta']) : nv.meta; if (m.realizadoGeral >= metaParaNivel && metaParaNivel >= maiorMeta) { nivelAlcancado = nv.id; maiorMeta = metaParaNivel; } }); 
+                let payout = 0; if (cfg[nivelAlcancado] !== undefined && cfg[nivelAlcancado] !== "") { payout = Number(cfg[nivelAlcancado]); } else if (cfg['l1'] !== undefined && cfg['l1'] !== "") { payout = Number(cfg['l1']); } 
+                comissaoUser += (qtdMod * payout);
+            }
+        }
 
         campanhasAtivas.forEach(camp => { 
             if (isCampaignActiveInMonth(camp.dataInicio, camp.dataFim, mesFiltro)) { 
@@ -1558,38 +1630,21 @@ function renderizarInputsFoco() {
     }); 
     htmlCampanhas += '</div></div>';
 
-let htmlAparelhos = '<div style="font-size: 15px; font-weight: bold; margin: 25px 0 15px 0; text-align: left;"><i data-lucide="smartphone" class="lucide-sm" style="color:var(--primary);"></i> Enquadramento e Valores por Aparelho:</div><div style="display: flex; flex-direction: column; gap: 15px;">';
-    
+    let htmlAparelhos = '<div style="font-size: 15px; font-weight: bold; margin: 25px 0 15px 0; text-align: left;"><i data-lucide="smartphone" class="lucide-sm" style="color:var(--primary);"></i> Enquadramento e Valores por Aparelho:</div><div style="display: flex; flex-direction: column; gap: 15px;">';
     for (let ap in mapaEmojis) {
-        let isFoco = premiumSup[ap] ? "checked": ""; 
-        let cfg = aparelhosCfg[ap] || { tipo: 'nenhum' };
-
-        if (cfg.tipo === undefined) {
-            if (cfg.comissionado === true || cfg.comissionado === 'true') { cfg.tipo = cfg.valorFixo ? 'fixo' : 'nenhum'; } else { cfg.tipo = 'nenhum'; }
-        }
-
-        let optHtml = `<option value="nenhum" ${cfg.tipo==='nenhum'?'selected':''}>❌ Sem Comissão</option>`;
-        optHtml += `<option value="fixo" ${cfg.tipo==='fixo'?'selected':''}>📌 Valor Fixo (Unitário)</option>`;
+        let isFoco = premiumSup[ap] ? "checked": ""; let cfg = aparelhosCfg[ap] || { tipo: 'nenhum' };
+        if (cfg.tipo === undefined) { if (cfg.comissionado === true || cfg.comissionado === 'true') { cfg.tipo = cfg.valorFixo ? 'fixo' : 'nenhum'; } else { cfg.tipo = 'nenhum'; } }
+        let optHtml = `<option value="nenhum" ${cfg.tipo==='nenhum'?'selected':''}>❌ Sem Comissão</option><option value="fixo" ${cfg.tipo==='fixo'?'selected':''}>📌 Valor Fixo (Unitário)</option>`;
         grupos.forEach(g => { optHtml += `<option value="grupo_${g.id}" ${cfg.tipo==='grupo' && cfg.grupoId===g.id?'selected':''}>📁 Categoria: ${g.nome}</option>`; });
-
-        htmlAparelhos += `<div style="background: var(--bg-card); padding: 18px; border-radius: 16px; border: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 12px;">`;
-        htmlAparelhos += `<div style="display:flex; justify-content:space-between; align-items:center;"><div style="font-size: 18px; font-weight: 800; display:flex; align-items:center;"><span style="font-size: 24px; margin-right: 10px;">${mapaEmojis[ap]}</span> ${ap.toUpperCase()}</div>`;
-        htmlAparelhos += `<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" class="check-foco-aparelho" value="${ap}" ${isFoco} onchange="atualizarListaPremiumGlobal()" style="width: 18px; height: 18px; margin:0;"><span style="background: var(--primary); color: white; padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight:bold;">Definir como Foco</span></label></div>`;
-        htmlAparelhos += `<div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">`;
-        htmlAparelhos += `<div style="flex:2; min-width:180px;"><span style="font-size:11px; font-weight:bold; color:var(--cor-secundaria); display:block; margin-bottom:4px;">Regra de Pagamento:</span><select class="ap-tipo-regra" data-ap="${ap}" style="margin:0; padding:10px; border-color:var(--primary);" onchange="adminMudarTipoComissaoAp('${ap}', this.value)">${optHtml}</select></div>`;
-        
-        if (cfg.tipo === 'fixo') {
-            htmlAparelhos += `<div style="flex:1; min-width:100px;"><span style="font-size:11px; font-weight:bold; color:var(--cor-secundaria); display:block; margin-bottom:4px;">Valor Fixo (R$):</span><input type="number" class="ap-valor-fixo" data-ap="${ap}" value="${cfg.valorFixo || 0}" style="margin:0; padding:10px;" onchange="atualizarListaPremiumGlobal()"></div>`;
-        } else if (cfg.tipo === 'grupo') {
+        htmlAparelhos += `<div style="background: var(--bg-card); padding: 18px; border-radius: 16px; border: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 12px;"><div style="display:flex; justify-content:space-between; align-items:center;"><div style="font-size: 18px; font-weight: 800; display:flex; align-items:center;"><span style="font-size: 24px; margin-right: 10px;">${mapaEmojis[ap]}</span> ${ap.toUpperCase()}</div><label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" class="check-foco-aparelho" value="${ap}" ${isFoco} onchange="atualizarListaPremiumGlobal()" style="width: 18px; height: 18px; margin:0;"><span style="background: var(--primary); color: white; padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight:bold;">Definir como Foco</span></label></div><div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;"><div style="flex:2; min-width:180px;"><span style="font-size:11px; font-weight:bold; color:var(--cor-secundaria); display:block; margin-bottom:4px;">Regra de Pagamento:</span><select class="ap-tipo-regra" data-ap="${ap}" style="margin:0; padding:10px; border-color:var(--primary);" onchange="adminMudarTipoComissaoAp('${ap}', this.value)">${optHtml}</select></div>`;
+        if (cfg.tipo === 'fixo') { htmlAparelhos += `<div style="flex:1; min-width:100px;"><span style="font-size:11px; font-weight:bold; color:var(--cor-secundaria); display:block; margin-bottom:4px;">Valor Fixo (R$):</span><input type="number" class="ap-valor-fixo" data-ap="${ap}" value="${cfg.valorFixo || 0}" style="margin:0; padding:10px;" onchange="atualizarListaPremiumGlobal()"></div>`; } 
+        else if (cfg.tipo === 'grupo') {
             let grupoEncontrado = grupos.find(x => x.id === cfg.grupoId);
             if (grupoEncontrado) {
                 htmlAparelhos += `<div style="width: 100%; display: flex; gap: 10px; overflow-x: auto; padding-top: 10px;">`;
                 grupoEncontrado.niveis.forEach((nv, nIdx) => {
                     let valorNivelAp = (cfg.valores && cfg.valores[nIdx]) ? cfg.valores[nIdx] : 0;
-                    htmlAparelhos += `<div style="flex:1; min-width:110px; background:var(--bg-container); border:1px solid var(--border-color); padding:10px; border-radius:8px;">`;
-                    htmlAparelhos += `<span style="font-size:11px; font-weight:bold; color:var(--primary); display:block;">Paga no Nível ${nIdx + 1}:</span>`;
-                    htmlAparelhos += `<div style="display:flex; align-items:center; gap:4px; margin-top:4px;">R$ <input type="number" class="ap-valor-grupo-nivel" data-ap="${ap}" data-nidx="${nIdx}" value="${valorNivelAp}" style="margin:0; padding:6px; font-weight:bold;" onchange="atualizarListaPremiumGlobal()"></div>`;
-                    htmlAparelhos += `</div>`;
+                    htmlAparelhos += `<div style="flex:1; min-width:110px; background:var(--bg-container); border:1px solid var(--border-color); padding:10px; border-radius:8px;"><span style="font-size:11px; font-weight:bold; color:var(--primary); display:block;">Paga no Nível ${nIdx + 1}:</span><div style="display:flex; align-items:center; gap:4px; margin-top:4px;">R$ <input type="number" class="ap-valor-grupo-nivel" data-ap="${ap}" data-nidx="${nIdx}" value="${valorNivelAp}" style="margin:0; padding:6px; font-weight:bold;" onchange="atualizarListaPremiumGlobal()"></div></div>`;
                 });
                 htmlAparelhos += `</div>`;
             }
@@ -1597,9 +1652,7 @@ let htmlAparelhos = '<div style="font-size: 15px; font-weight: bold; margin: 25p
         htmlAparelhos += `</div></div>`;
     }
     htmlAparelhos += '</div>';
-
     container.innerHTML = htmlGrupos + htmlCampanhas + htmlAparelhos; loadIcons();
-}
 }
 
 function adminAddGrupo() { let selSup = document.getElementById('seletor-foco-sup').value; if (!valoresComissao[selSup]) valoresComissao[selSup] = {}; if (!valoresComissao[selSup].grupos) valoresComissao[selSup].grupos = []; valoresComissao[selSup].grupos.push({ id: 'g' + Date.now(), nome: 'Nova Categoria', niveis: [{ meta: 1 }] }); renderizarInputsFoco(); atualizarListaPremiumGlobal(); }
@@ -1628,7 +1681,6 @@ function atualizarListaPremiumGlobal() {
          else if (val === 'fixo') { let inputFixo = document.querySelector(`.ap-valor-fixo[data-ap="${ap}"]`); cfgAp[ap] = { tipo: 'fixo', valorFixo: inputFixo ? Number(inputFixo.value) : 0 }; } 
          else if (val.startsWith('grupo_')) { 
               let gId = val.replace('grupo_', ''); cfgAp[ap] = { tipo: 'grupo', grupoId: gId, valores: {} };
-              // Busca e atrela o valor à meta do índice (0, 1)
               document.querySelectorAll(`.ap-valor-grupo-nivel[data-ap="${ap}"]`).forEach(inp => { let nIdx = inp.getAttribute('data-nidx'); cfgAp[ap].valores[nIdx] = Number(inp.value); });
          }
     });
