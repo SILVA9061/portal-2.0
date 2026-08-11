@@ -104,7 +104,6 @@
     </div>
 </div>
 
-<!-- MODAL DE MARKET SHARE ATUALIZADO COM MARCAS DINÂMICAS -->
 <div id="modal-fechamento-share" class="modal-overlay">
     <div class="modal-content">
         <h3 style="color: #3b82f6; margin-bottom: 10px; font-size: 22px;"><i data-lucide="pie-chart"></i> Market Share</h3>
@@ -114,14 +113,12 @@
             <label style="font-size: 12px; font-weight: bold; color: var(--cor-secundaria);">Selecione a Loja:</label>
             <select id="select-loja-share" style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 15px; background: var(--bg-input); color: var(--cor-texto);"></select>
             
-            <!-- AVISO DE AUTOMAÇÃO -->
             <div style="background: rgba(16, 185, 129, 0.1); border: 1px dashed #10b981; padding: 10px; border-radius: 8px; margin-bottom: 15px; text-align: center;">
                 <span style="font-size: 12px; font-weight: bold; color: #10b981;"><i data-lucide="bot" class="lucide-sm"></i> Suas vendas (OPPO) são puxadas automaticamente!</span>
             </div>
 
             <label style="font-size: 12px; font-weight: bold; color: #ef4444; display: block; margin-bottom: 8px;">Concorrência (Fechamento do Dia):</label>
             
-            <!-- AQUI É ONDE O JS VAI INJETAR AS MARCAS DINAMICAMENTE -->
             <div id="container-inputs-concorrencia" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
             </div>
         </div>
@@ -193,7 +190,6 @@
     </div>
 </div>
 
-<!-- MODAL DE NOVA MARCA CONCORRENTE -->
 <div id="modal-nova-marca" class="modal-overlay">
     <div class="modal-content">
         <h3 style="color: var(--primary);"><i data-lucide="plus-circle"></i> Nova Marca</h3>
@@ -418,39 +414,41 @@
 
 <div id="tela-dashboard" class="tela">
     
-    <!-- CONTROLES GERAIS (Servem para as duas abas) -->
-    <div class="controles-topo-acompanhamento" style="margin-bottom: 10px; display: flex; gap: 10px; align-items: center;">
-<div style="display: flex; gap: 10px; flex: 1;">
-    <input type="date" id="dash-data-inicio" class="seletor-mes" style="margin-bottom: 0; padding: 14px;" onchange="abrirDashboard(); carregarGraficosShare();">
-    <input type="date" id="dash-data-fim" class="seletor-mes" style="margin-bottom: 0; padding: 14px;" onchange="abrirDashboard(); carregarGraficosShare();">
-</div>
-        <button class="btn-sistema" onclick="forcarAtualizacaoDashboard()" style="margin-bottom: 0; width: auto; padding: 14px 18px; border-radius: 12px; background: var(--primary-gradiente);" title="Forçar Atualização"><i data-lucide="refresh-cw" id="icon-refresh-dash" style="margin: 0;"></i></button>
-        <button class="btn-sistema" onclick="compartilharDashboard()" style="margin-bottom: 0; width: auto; padding: 14px 18px; border-radius: 12px; background: #8b5cf6;" title="Compartilhar Print"><i data-lucide="camera" style="margin: 0;"></i></button>
-    </div>
-
-    <!-- NOVOS FILTROS EM CASCATA GERAIS DO DASHBOARD -->
-    <div id="filtros-globais-dash" style="background: var(--bg-card); padding: 15px; border-radius: 16px; border: 1px solid var(--border-color); margin-bottom: 20px; text-align: left;">
-        <div id="container-filtro-supervisor-dash" style="display: none; margin-bottom: 12px;">
-            <label style="font-size: 11px; font-weight: bold; color: var(--cor-secundaria);">Equipe / Região (Supervisor):</label>
-            <select id="filtro-supervisor-dash" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-input); color: var(--cor-texto);" onchange="mudouSupervisorDash()"></select>
-        </div>
+    <!-- CONTROLES GERAIS -->
+    <div class="controles-topo-acompanhamento" style="margin-bottom: 10px; display: flex; flex-direction: column; gap: 10px;">
         
-        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-            <div id="container-filtro-promotor-dash" style="flex: 1; min-width: 140px; display: none;">
-                <label style="font-size: 11px; font-weight: bold; color: var(--cor-secundaria);">Promotor:</label>
-                <select id="filtro-promotor-dash" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #8b5cf6; background: var(--bg-input); color: var(--cor-texto);" onchange="mudouPromotorDash()"></select>
+        <!-- BOTÕES DE FILTRO RÁPIDO NO DASHBOARD -->
+        <div style="display: flex; gap: 5px; overflow-x: auto; padding-bottom: 2px;" class="tabs-header">
+            <button class="tab-btn" style="padding: 8px 12px; font-size: 12px; border-radius: 8px; border: 1px solid var(--primary); color: var(--cor-texto) !important; opacity: 1;" onclick="setFiltroDataRapidoDash('hoje')">Hoje</button>
+            <button class="tab-btn" style="padding: 8px 12px; font-size: 12px; border-radius: 8px; border: 1px solid var(--primary); color: var(--cor-texto) !important; opacity: 1;" onclick="setFiltroDataRapidoDash('ontem')">Ontem</button>
+            <button class="tab-btn" style="padding: 8px 12px; font-size: 12px; border-radius: 8px; border: 1px solid var(--primary); color: var(--cor-texto) !important; opacity: 1;" onclick="setFiltroDataRapidoDash('semana')">Semana</button>
+            <button class="tab-btn" style="padding: 8px 12px; font-size: 12px; border-radius: 8px; border: 1px solid var(--primary); color: var(--cor-texto) !important; opacity: 1;" onclick="setFiltroDataRapidoDash('mes')">Mês</button>
+            <button class="tab-btn" style="padding: 8px 12px; font-size: 12px; border-radius: 8px; border: 1px solid var(--cor-secundaria); color: var(--cor-secundaria) !important; opacity: 1;" onclick="setFiltroDataRapidoDash('limpar')">Limpar</button>
+        </div>
+
+        <div style="display: flex; gap: 10px; align-items: center; width: 100%;">
+            <div style="display: flex; gap: 10px; flex: 1;">
+                <input type="date" id="dash-data-inicio" class="seletor-mes" style="margin-bottom: 0; padding: 14px;" onchange="abrirDashboard(); carregarGraficosShare();">
+                <input type="date" id="dash-data-fim" class="seletor-mes" style="margin-bottom: 0; padding: 14px;" onchange="abrirDashboard(); carregarGraficosShare();">
             </div>
-            <div id="container-filtro-loja-dash" style="flex: 1; min-width: 140px;">
-                <label style="font-size: 11px; font-weight: bold; color: var(--cor-secundaria);">Filtrar por Loja:</label>
-                <select id="filtro-loja-dash" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #10b981; background: var(--bg-input); color: var(--cor-texto);" onchange="abrirDashboard(); carregarGraficosShare();"></select>
-            </div>
+            <button class="btn-sistema" onclick="forcarAtualizacaoDashboard()" style="margin-bottom: 0; width: auto; padding: 14px 18px; border-radius: 12px; background: var(--primary-gradiente);" title="Forçar Atualização"><i data-lucide="refresh-cw" id="icon-refresh-dash" style="margin: 0;"></i></button>
+            <button class="btn-sistema" onclick="compartilharDashboard()" style="margin-bottom: 0; width: auto; padding: 14px 18px; border-radius: 12px; background: #8b5cf6;" title="Compartilhar Print"><i data-lucide="camera" style="margin: 0;"></i></button>
+        </div>
+
+        <div style="display: flex; gap: 10px;" id="container-filtro-supervisor-dash">
+            <select id="filtro-supervisor-dash" onchange="mudouSupervisorDash()"></select>
+        </div>
+        <div style="display: flex; gap: 10px; margin-top: 5px;" id="container-filtro-promotor-dash">
+            <select id="filtro-promotor-dash" onchange="mudouPromotorDash()"></select>
+            <select id="filtro-loja-dash" onchange="abrirDashboard(); carregarGraficosShare();"></select>
         </div>
     </div>
 
-    <!-- ABAS DO DASHBOARD -->
+    <!-- ABAS DO DASHBOARD ATUALIZADAS COM A ANÁLISE AVANÇADA -->
     <div class="tabs-header" style="margin-bottom: 20px;">
         <button class="tab-btn ativo dash-tab-btn" onclick="switchTab('dash-tab-oppo', 'dash-tab')"><i data-lucide="smartphone"></i> Resultados OPPO</button>
         <button class="tab-btn dash-tab-btn" onclick="switchTab('dash-tab-mercado', 'dash-tab'); carregarGraficosShare();"><i data-lucide="globe"></i> Visão de Mercado</button>
+        <button class="tab-btn dash-tab-btn" onclick="switchTab('dash-tab-avancada', 'dash-tab')"><i data-lucide="activity"></i> Análise Avançada</button>
     </div>
 
     <!-- INÍCIO DA ABA OPPO -->
@@ -510,6 +508,23 @@
         <div style="background: var(--bg-card); padding: 20px; border-radius: 20px; margin-bottom: 25px; text-align: left; border: 1px solid var(--border-color);">
             <h4 style="margin-top:0; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; display: flex; align-items: center; gap: 8px;"><i data-lucide="thermometer"></i> Temperatura das Lojas</h4>
             <div id="lista-temperatura-lojas" style="margin-top: 15px;">Carregando termômetro...</div>
+        </div>
+    </div>
+
+    <!-- INÍCIO DA NOVA ABA: ANÁLISE AVANÇADA -->
+    <div id="dash-tab-avancada" class="dash-tab-content" style="display: none;">
+        <!-- Gráfico de Horários de Pico (Mapa de Calor) -->
+        <div style="background: var(--bg-card); padding: 20px; border-radius: 20px; margin-bottom: 25px; border: 1px solid var(--border-color);">
+            <h4 style="margin-top:0; text-align:left; display: flex; align-items: center; gap: 8px;"><i data-lucide="clock"></i> Horários de Pico (Fluxo de Vendas)</h4>
+            <p style="font-size: 12px; color: var(--cor-secundaria); text-align: left; margin-bottom: 15px;">Identifique os horários com maior volume de vendas da equipe no período selecionado.</p>
+            <div style="position: relative; height: 280px; width: 100%;"><canvas id="graficoHorariosPico"></canvas></div>
+        </div>
+
+        <!-- Gráfico de Projeção Preditiva (Pace Visual) -->
+        <div style="background: var(--bg-card); padding: 20px; border-radius: 20px; margin-bottom: 25px; border: 1px solid var(--border-color);">
+            <h4 style="margin-top:0; text-align:left; display: flex; align-items: center; gap: 8px;"><i data-lucide="trending-up"></i> Projeção de Fechamento (Pace vs Meta)</h4>
+            <p style="font-size: 12px; color: var(--cor-secundaria); text-align: left; margin-bottom: 15px;">Compara o ritmo atual de vendas diárias com o volume necessário para atingir 100% da meta.</p>
+            <div style="position: relative; height: 250px; width: 100%;"><canvas id="graficoPaceVisual"></canvas></div>
         </div>
     </div>
 </div>

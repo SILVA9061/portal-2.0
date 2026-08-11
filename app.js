@@ -1,6 +1,6 @@
 // ==========================================
-// app.js - PARTE 1 DE 6
-// Variáveis Globais, Interface, Motor de Nuvem e Utilitários
+// app.js - PARTE 1 DE 10
+// Variáveis Globais, Interface e Navegação
 // ==========================================
 
 let lojaAtual = ""; 
@@ -168,9 +168,95 @@ async function salvarConfiguracoesGlobais(mostrarAviso = true) {
         loadIcons();
     }
 }
-
 // ==========================================
-// UTILITÁRIOS MATEMÁTICOS, SKELETON E LÓGICA
+// SISTEMA DE PULL-TO-REFRESH NATIVO (CORRIGIDO)
+// ==========================================
+let ptrStartY = 0; let ptrCurrentY = 0; let isPulling = false;
+
+document.addEventListener('touchstart', e => {
+    if (window.scrollY === 0 || document.documentElement.scrollTop === 0) { 
+        ptrStartY = e.touches[0].clientY; 
+        isPulling = true; 
+    }
+}, { passive: true });
+
+document.addEventListener('touchmove', e => {
+    if (!isPulling) return;
+    
+    let currentY = e.touches[0].clientY;
+    let diffY = currentY - ptrStartY;
+
+    // Se estamos no topo da página e puxando para baixo
+    if (diffY > 0 && (window.scrollY === 0 || document.documentElement.scrollTop === 0)) {
+        
+        // A MAGIA ACONTECE AQUI: Bloqueia o navegador de recarregar a página inteira
+        if (e.cancelable) e.preventDefault(); 
+        
+        ptrCurrentY = currentY;
+        
+        if (diffY > 15) {
+            let ptr = document.getElementById('ptr-indicator');
+            if (!ptr) {
+                ptr = document.createElement('div'); ptr.id = 'ptr-indicator';
+                ptr.innerHTML = '<i data-lucide="arrow-down" id="ptr-icon" style="margin:0;"></i>';
+                document.body.appendChild(ptr);
+                if(typeof lucide !== 'undefined') lucide.createIcons();
+            }
+            
+            // Calcula a puxada para a bolinha descer suavemente
+            let pullDist = Math.min((diffY - 15) / 2, 60);
+            ptr.style.top = pullDist + 'px';
+            
+            let icon = document.getElementById('ptr-icon');
+            if (icon) {
+                if (diffY > 90) { // Bateu a distância certa
+                    icon.setAttribute('data-lucide', 'refresh-cw'); 
+                } else { 
+                    icon.setAttribute('data-lucide', 'arrow-down'); 
+                }
+                if(typeof lucide !== 'undefined') lucide.createIcons();
+            }
+        }
+    } else {
+        isPulling = false;
+    }
+}, { passive: false }); // O "passive: false" é obrigatório para não deixar a página atualizar
+
+document.addEventListener('touchend', e => {
+    if (!isPulling) return;
+    isPulling = false;
+    
+    let diffY = ptrCurrentY - ptrStartY;
+    let ptr = document.getElementById('ptr-indicator');
+    
+    if (ptr && diffY > 90) { // Se puxou o suficiente, solta e atualiza!
+        ptr.classList.add('refreshing'); 
+        ptr.style.top = '40px'; 
+        executarRefreshTelaAtual(); 
+        
+        setTimeout(() => {
+            ptr.style.top = '-60px'; 
+            ptr.classList.remove('refreshing');
+            setTimeout(() => ptr.remove(), 300);
+        }, 1500);
+    } else if (ptr) { // Se não puxou o suficiente, só esconde
+        ptr.style.top = '-60px'; 
+        setTimeout(() => ptr.remove(), 300);
+    }
+    ptrStartY = 0; ptrCurrentY = 0;
+});
+
+function executarRefreshTelaAtual() {
+    vibrar(50);
+    if (document.getElementById('tela-dashboard').classList.contains('ativa')) { forcarAtualizacaoDashboard(); } 
+    else if (document.getElementById('tela-acompanhamento').classList.contains('ativa')) { carregarDadosDoBanco(); } 
+    else if (document.getElementById('tela-estoque').classList.contains('ativa')) { carregarEstoqueDoBanco(); } 
+    else if (document.getElementById('tela-historico').classList.contains('ativa')) { carregarHistoricoDoBanco(true); } 
+    else { mostrarToast("Atualizado!", "sucesso"); }
+}
+// ==========================================
+// app.js - PARTE 2 DE 10
+// Utilitários Matemáticos, Skeletons e Dias Úteis
 // ==========================================
 
 function gerarSkeletonHtml(qtd) {
@@ -189,7 +275,6 @@ function calcularDiasUteisRestantes() {
     for (let d = hoje.getDate(); d <= ultimoDia.getDate(); d++) {
         let dataAtual = new Date(hoje.getFullYear(), hoje.getMonth(), d);
         let diaSemana = dataAtual.getDay();
-        // 0 = Domingo, 6 = Sábado. Considera dias úteis de segunda a sexta.
         if (diaSemana !== 0 && diaSemana !== 6) {
             diasUteis++;
         }
@@ -213,9 +298,10 @@ function ehPremium(textoBruto, supervisorId) {
     if (!pSup || Object.keys(pSup).length === 0) pSup = aparelhosPremium["geral"] || {}; 
     return (pSup[chave] === 1 || pSup[chave] === true); 
 }
+
 // ==========================================
-// app.js - PARTE 2 DE 6
-// Vendas, Lojas e Envio para Nuvem (Com trava de estoque)
+// app.js - PARTE 3 DE 10
+// Seleção de Equipes, Lojas e Vendedores
 // ==========================================
 
 function irParaVendas() {
@@ -320,6 +406,10 @@ function toggleVendedorVenda(nome) {
     else vendedorSelecionadoVenda = nome; 
     renderizarVendedoresVenda(); 
 }
+// ==========================================
+// app.js - PARTE 4 DE 10
+// Carrinho de Vendas, IMEIs e Envio Seguro (Com Trava de Estoque)
+// ==========================================
 
 function carregarCards() { 
     const div = document.getElementById("grid-aparelhos"); let html = ""; 
@@ -370,7 +460,6 @@ async function enviarParaBanco() {
     btn.innerHTML = '<i data-lucide="loader-2" style="animation: spin 2s linear infinite;"></i> Validando Estoque...';
     loadIcons();
 
-    // 1. Contabiliza a quantidade necessária para esta venda
     let contagemNecessaria = {};
     pendenciasVendaMultipla.forEach(p => {
         let nomeAparelhoFormatado = `${p.emoji} ${p.aparelho}`;
@@ -378,7 +467,6 @@ async function enviarParaBanco() {
     });
 
     try {
-        // 2. VALIDAÇÃO DE ESTOQUE NO BANCO DE DADOS
         let aparelhosSemEstoque = [];
         
         for (let apNome in contagemNecessaria) {
@@ -392,22 +480,19 @@ async function enviarParaBanco() {
             let qtdAtual = estItem ? (estItem.quantidade || 0) : 0;
             let qtdExigida = contagemNecessaria[apNome];
 
-            // Se a quantidade no banco for menor que a exigida na venda, acusa o erro
             if (qtdAtual < qtdExigida) {
                 aparelhosSemEstoque.push(`• ${apNome} (Estoque: ${qtdAtual} | Vendendo: ${qtdExigida})`);
             }
         }
 
-        // 3. SE FALTAR ESTOQUE, ABORTA O ENVIO E MOSTRA O ERRO
         if (aparelhosSemEstoque.length > 0) {
             mostrarToast(`ESTOQUE INSUFICIENTE!\nCorrija a auditoria:\n\n${aparelhosSemEstoque.join('\n')}`, "erro");
             btn.disabled = false;
             btn.innerHTML = '<i data-lucide="send"></i> Enviar';
             loadIcons();
-            return; // Aborta completamente a gravação da venda
+            return; 
         }
 
-        // 4. SE PASSOU NA VALIDAÇÃO, MUDA O BOTÃO E GRAVA A VENDA
         btn.innerHTML = '<i data-lucide="loader-2" style="animation: spin 2s linear infinite;"></i> Salvando Venda...';
         loadIcons();
 
@@ -427,7 +512,6 @@ async function enviarParaBanco() {
         const { error: errV } = await supabaseClient.from('vendas').insert(vendasInsert);
         if (errV) throw errV;
 
-        // 5. ATUALIZA O ESTOQUE SEGURAMENTE (Subtrai apenas o que foi vendido)
         for (let apNome in contagemNecessaria) {
              const { data: estItem } = await supabaseClient.from('estoque').select('*').eq('loja', lojaAtual).eq('aparelho', apNome).maybeSingle();
              if (estItem) {
@@ -449,8 +533,8 @@ async function enviarParaBanco() {
     }
 }
 // ==========================================
-// app.js - PARTE 3 DE 6
-// Acompanhamento (Rankings) e Cancelamentos (Estorno)
+// app.js - PARTE 5 DE 10
+// Acompanhamento e Listas de Vendas Agrupadas
 // ==========================================
 
 function abrirAcompanhamento() { 
@@ -607,15 +691,24 @@ async function carregarDadosDoBanco() {
     if(div) div.innerHTML = gerarSkeletonHtml(5);
 
     try {
-        const { data, error } = await supabaseClient.from('vendas').select('*').neq('status', 'Cancelado').order('data_venda', { ascending: false });
+        const { data, error } = await supabaseClient.from('vendas')
+            .select('*')
+            .neq('status', 'Cancelado')
+            .neq('status', 'Auditoria') // TRAVA: Ignora registros de estoque
+            .order('data_venda', { ascending: false });
+            
         if (error) throw error;
 
-        dadosAcompanhamentoGlobal = data.map(row => ({
-            Vendedor: `[${row.loja}] ${row.vendedor}`,
-            Aparelhos: row.aparelhos_vendidos,
-            Data: row.data_venda,
-            Status: row.status || "Realizado"
-        }));
+        dadosAcompanhamentoGlobal = data
+            // TRAVA BLINDADA: Filtra qualquer coisa que contenha [AUDITORIA]
+            .filter(row => !(row.aparelhos_vendidos || "").toUpperCase().includes('[AUDITORIA]'))
+            .map(row => ({
+                Vendedor: `[${row.loja}] ${row.vendedor}`,
+                Aparelhos: row.aparelhos_vendidos,
+                Data: row.data_venda,
+                Status: row.status || "Realizado"
+            }));
+            
         if (typeof renderizarListaAcompanhamento === "function") renderizarListaAcompanhamento();
     } catch (err) {
         console.error(err);
@@ -626,6 +719,10 @@ async function carregarDadosDoBanco() {
         loadIcons();
     }
 }
+// ==========================================
+// app.js - PARTE 6 DE 10
+// Histórico, Filtros de Data, Estorno e Acordeão Multi-Aparelhos
+// ==========================================
 
 function abrirHistorico(tipo) { 
     tipoHistoricoAtual = tipo; 
@@ -676,7 +773,6 @@ async function carregarHistoricoDoBanco(forcarNuvem = false) {
         const { data, error } = await supabaseClient.from('vendas').select('*').order('data_venda', { ascending: false }).limit(500);
         if (error) throw error;
 
-        // ESTRUTURA BLINDADA PARA ESTORNO
         dadosHistoricoGlobal = data.map(row => ({
             id_banco: row.id, 
             Tipo: row.status === 'Auditoria' ? 'Auditoria' : 'Venda',
@@ -796,13 +892,20 @@ function validarECancelarVenda() {
     if (modal) modal.classList.remove('ativo'); 
     executarCancelamentoVenda(); 
 }
-// ==========================================
-// app.js - PARTE 4 DE 6
-// Renderização do Histórico, Filtros de Data e Estoque Completo
-// ==========================================
 
 let limiteHistorico = 50; 
 function aplicarFiltroHistorico() { limiteHistorico = 50; renderizarListaHistorico(); }
+
+// FUNÇÃO DO ACORDEÃO
+window.toggleAcordeaoHistorico = function(container, id) {
+    let content = document.getElementById(id);
+    let btn = container.querySelector('.btn-expandir-historico');
+    if(content.classList.contains('expandido')) {
+        content.classList.remove('expandido'); if(btn) btn.classList.remove('aberto');
+    } else {
+        content.classList.add('expandido'); if(btn) btn.classList.add('aberto');
+    }
+};
 
 function renderizarListaHistorico() { 
     const div = document.getElementById("lista-historico"); 
@@ -869,7 +972,6 @@ function renderizarListaHistorico() {
         let nomePromotor = bancoUsuarios[item.pLogin] ? bancoUsuarios[item.pLogin].nome : item.pLogin; 
         if (!nomePromotor) nomePromotor = "Usuário Desconhecido"; 
         
-        let textoDetalheLimpo = item.detalhe.replace(/\[CANCELADO\]/ig, '').trim(); 
         let opacidade = item.isCancelado ? "opacity: 0.7; filter: grayscale(0.8);" : ""; 
         let bgCard = item.isCancelado ? "background: var(--bg-fundo);" : "background: var(--bg-card);"; 
         let bordaCard = item.isCancelado ? "border: 1px dashed #ef4444;" : "border: 1px solid var(--border-color);"; 
@@ -883,59 +985,121 @@ function renderizarListaHistorico() {
         
         if (tipoHistoricoAtual === 'geral' && adminRole && !item.isEstoque) { 
             if (!item.isCancelado) { 
-                btnAcao = `<button onclick="abrirModalCancelarVenda(${item.originalIndex}, '${item.pLogin}')" style="background: transparent; color: #ef4444; border: 1px solid rgba(239,68,68,0.3); padding: 10px 15px; border-radius: 8px; font-size: 13px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 5px;"><i data-lucide="x-circle" class="lucide-sm"></i> Estornar</button>`; 
+                btnAcao = `<button onclick="abrirModalCancelarVenda(${item.originalIndex}, '${item.pLogin}')" style="background: rgba(239,68,68,0.1); color: #ef4444; border: 1px solid rgba(239,68,68,0.3); padding: 10px; border-radius: 8px; font-size: 13px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px; width: 100%; margin-top: 10px;"><i data-lucide="x-circle" class="lucide-sm"></i> Estornar Venda</button>`; 
             } else { 
-                btnAcao = `<button onclick="executarDesfazerCancelamento(${item.originalIndex})" style="background: var(--bg-item); color: #10b981; border: 1px solid rgba(16,185,129,0.3); padding: 10px 15px; border-radius: 8px; font-size: 13px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 5px;"><i data-lucide="rotate-ccw" class="lucide-sm"></i> Desfazer</button>`; 
+                btnAcao = `<button onclick="executarDesfazerCancelamento(${item.originalIndex})" style="background: rgba(16,185,129,0.1); color: #10b981; border: 1px solid rgba(16,185,129,0.3); padding: 10px; border-radius: 8px; font-size: 13px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px; width: 100%; margin-top: 10px;"><i data-lucide="rotate-ccw" class="lucide-sm"></i> Desfazer Estorno</button>`; 
             } 
-        } 
+        }
+        
+        // TRATAMENTO INTELIGENTE PARA VENDAS MÚLTIPLAS E ÚNICAS
+        let textoBase = item.detalhe.replace(/\[CANCELADO\]/ig, '').trim();
+        let tituloResumo = ""; let listaItensHtml = "";
+
+        if (item.isEstoque) {
+            tituloResumo = textoBase;
+        } else {
+            // Remove o prefixo "Venda:" se houver
+            let limpo = textoBase.replace(/^Venda:\s*/i, '');
+            // Separa os aparelhos da loja/vendedor usando o pipe "|"
+            let partesLojas = limpo.split('|');
+            let aparelhosBrutos = partesLojas[0].trim();
+            let lojaVendedorInfo = partesLojas.slice(1).join('|').trim(); // ex: [Magazine Luiza 286] Faby
+
+            // Quebra múltiplos aparelhos separados por "||"
+            let arrayAparelhos = aparelhosBrutos.split('||').map(x => x.trim()).filter(x => x !== "");
+            
+            if (arrayAparelhos.length > 1) {
+                tituloResumo = `${arrayAparelhos.length} Aparelhos Vendidos (${lojaVendedorInfo || 'Loja'})`;
+            } else if (arrayAparelhos.length === 1) {
+                tituloResumo = `${arrayAparelhos[0]} | ${lojaVendedorInfo}`;
+            } else {
+                tituloResumo = limpo;
+            }
+
+            // Monta a listagem limpa para dentro do Acordeão
+            arrayAparelhos.forEach(ap => {
+                let imeiMatch = ap.match(/IMEI:\s*(.*?)(\)|$)/);
+                let imei = imeiMatch ? imeiMatch[1].trim() : "";
+                let textoSemImei = ap.replace(/\(IMEI:.*?\)/g, "").replace(/IMEI:.*/g, "").trim();
+                let emoji = textoSemImei.substring(0, 2).trim();
+                let modelo = textoSemImei.substring(2).trim();
+
+                listaItensHtml += `
+                <div style="display: flex; flex-direction: column; gap: 2px; background: var(--bg-card); padding: 8px 10px; border-radius: 6px; margin-bottom: 6px; border: 1px solid var(--border-color);">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 16px;">${emoji}</span>
+                        <strong style="font-size: 13px; color: var(--cor-texto);">${modelo}</strong>
+                    </div>
+                    ${imei ? `<span style="font-size: 11px; color: var(--cor-secundaria); margin-left: 24px;">IMEI: ${imei}</span>` : ''}
+                </div>`;
+            });
+            
+            if (lojaVendedorInfo) {
+                listaItensHtml += `<div style="font-size: 11px; font-weight: bold; color: var(--primary); margin-top: 4px;">📍 Local/Vendedor: ${lojaVendedorInfo}</div>`;
+            }
+        }
+
+        let htmlCorpoVenda = "";
+        if (listaItensHtml !== "" || btnAcao !== "") {
+            htmlCorpoVenda = `
+                <div style="display: flex; flex-direction: column; width: 100%;">
+                    <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; width: 100%; cursor: pointer;" onclick="toggleAcordeaoHistorico(this, 'acordeao-${item.originalIndex}')">
+                        <div style="display:flex; align-items:center; gap:8px;">${icone} <strong style="font-size:14px;">${tituloResumo}</strong></div>
+                        <button class="btn-expandir-historico" style="background:var(--bg-fundo); border:1px solid var(--border-color); color:var(--cor-secundaria); padding:4px 8px; border-radius:6px; cursor:pointer; pointer-events: none;">
+                            <i data-lucide="chevron-down" style="margin:0; transition: transform 0.3s; width:14px; height:14px;"></i>
+                        </button>
+                    </div>
+                    <div id="acordeao-${item.originalIndex}" class="historico-detalhes">
+                        <div style="padding: 12px; background: var(--bg-fundo); border-radius: 8px; margin-top: 8px; font-size: 12px; font-weight: 500; color: var(--cor-secundaria); word-break: break-word; border: 1px solid var(--border-color);">
+                            ${listaItensHtml}
+                            ${btnAcao}
+                        </div>
+                    </div>
+                </div>`;
+        } else {
+            htmlCorpoVenda = `<div style="display: flex; align-items: flex-start; gap: 8px;">${icone} <span style="word-break: break-word; font-weight:bold;">${textoBase}</span></div>`;
+        }
         
         html += `
-        <div class="swipe-container" style="${opacidade} ${bordaCard}">
-            <div class="swipe-actions">
-                ${btnAcao}
+        <div style="${bgCard} ${opacidade} ${bordaCard} padding: 16px; border-radius: 12px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 8px; transition: background-color 0.2s ease;">
+            ${badgeCancelado}
+            <div style="display: flex; flex-direction: column; gap: 4px; text-align: left;">
+                <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                    <span style="font-size: 11px; font-weight: bold; color: var(--cor-secundaria);">${dataFormatada}</span>
+                </div>
+                <div style="font-size: 13px; font-weight: bold; color: var(--primary); display: flex; align-items: center; gap: 4px; word-break: break-word; overflow: hidden;">
+                    <i data-lucide="user" class="lucide-sm" style="flex-shrink: 0;"></i> 
+                    <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;">${nomePromotor}</span>
+                </div>
             </div>
-            <div class="swipe-content" style="${bgCard} padding: 16px; display: flex; flex-direction: column; gap: 8px;">
-                ${badgeCancelado}
-                <div style="display: flex; justify-content: space-between; align-items:center;">
-                    <span style="font-size:12px; font-weight:bold; color:var(--cor-secundaria);">${dataFormatada}</span>
-                    <span style="font-size: 13px; font-weight:bold; color:var(--primary);"><i data-lucide="user" class="lucide-sm"></i> ${nomePromotor}</span>
-                </div>
-                <div style="font-size:14px; ${estiloTexto} display: flex; align-items: flex-start; justify-content: space-between; gap:8px;">
-                    <div style="display: flex; align-items: flex-start; gap: 8px;">${icone} <span>${textoDetalheLimpo}</span></div>
-                </div>
-                <div style="font-size: 10px; color: var(--cor-secundaria); text-align: center; margin-top: 5px; opacity: 0.6; display: ${btnAcao !== '' ? 'block' : 'none'};">
-                    <i data-lucide="chevrons-left" class="lucide-sm"></i> Deslize para a esquerda para ações
-                </div>
+
+            <!-- CORPO DA VENDA (COM ACORDEÃO PARA MÚLTIPLOS APARELHOS) -->
+            <div style="font-size: 14px; ${estiloTexto} text-align: left; display: flex;">
+                ${htmlCorpoVenda}
             </div>
         </div>`;
     }); 
     
     div.innerHTML = html; 
-    
-    // ATIVANDO O SENSOR DE TOQUE (SWIPE)
-    document.querySelectorAll('.swipe-content').forEach(el => {
-        let startX = 0;
-        el.addEventListener('touchstart', e => { startX = e.touches[0].clientX; }, {passive: true});
-        el.addEventListener('touchmove', e => {
-            let diff = startX - e.touches[0].clientX;
-            if (diff > 40) { el.style.transform = 'translateX(-130px)'; } 
-            else if (diff < -40) { el.style.transform = 'translateX(0)'; } 
-        }, {passive: true});
-    });
-
     loadIcons(); 
+    
     if (filtrados_total > limiteHistorico) { 
         div.innerHTML += `<button class="btn-sistema" style="margin-top: 15px; background: var(--bg-item); color: var(--primary); border: 1px solid var(--primary);" onclick="limiteHistorico += 50; renderizarListaHistorico();">Carregar mais históricos...</button>`; 
     } 
 }
 
-function setFiltroDataRapido(tipo) {
-    let inputInicio = document.getElementById('filtro-data-inicio-historico');
-    let inputFim = document.getElementById('filtro-data-fim-historico');
+function setFiltroDataRapidoDash(tipo) {
+    let inputInicio = document.getElementById('dash-data-inicio');
+    let inputFim = document.getElementById('dash-data-fim');
     if (!inputInicio || !inputFim) return;
     
     let hoje = new Date();
-    let formatarData = (d) => d.toISOString().split('T')[0];
+    let formatarData = (d) => {
+        let ano = d.getFullYear();
+        let mes = String(d.getMonth() + 1).padStart(2, '0');
+        let dia = String(d.getDate()).padStart(2, '0');
+        return `${ano}-${mes}-${dia}`;
+    };
     
     if (tipo === 'hoje') {
         let strHoje = formatarData(hoje);
@@ -960,10 +1124,15 @@ function setFiltroDataRapido(tipo) {
         inputInicio.value = "";
         inputFim.value = "";
     }
-    aplicarFiltroHistorico();
+    
+    abrirDashboard();
+    carregarGraficosShare();
 }
+// ==========================================
+// app.js - PARTE 7 DE 10
+// Gestão de Estoque, Mostruários e Rupturas
+// ==========================================
 
-// ================= MOSTRUÁRIO E ESTOQUE =================
 function fecharModalConfirmMostruario() { document.getElementById('modal-confirm-mostruario').classList.remove('ativo'); mostruarioEmEdicao = null; }
 function fecharModalPromptMostruario() { document.getElementById('modal-prompt-mostruario').classList.remove('ativo'); mostruarioEmEdicao = null; }
 
@@ -1126,11 +1295,18 @@ function renderizarListaEstoque() {
     }); 
     
     let html = ""; 
+    let totalRupturas = 0;
+    let totalBaixoEstoque = 0;
+
     for (let loja in lojasEstoque) { 
         let totalLoja = 0; let htmlItens = ""; 
         for (let apNome in lojasEstoque[loja]) { 
             if (termoBusca && !apNome.toLowerCase().includes(termoBusca)) continue; 
             let qtd = lojasEstoque[loja][apNome]; 
+            
+            if (qtd === 0) totalRupturas++;
+            else if (qtd > 0 && qtd < 3) totalBaixoEstoque++;
+
             if (qtd === 0 && !mostrarZerados) continue; 
             totalLoja += qtd; 
             
@@ -1171,7 +1347,19 @@ function renderizarListaEstoque() {
             html += `<div class="loja-card-acompanhamento" style="background: transparent; border: none; box-shadow: none; padding: 0;"><div class="loja-titulo" style="margin-bottom: 15px; border-radius: 12px;"><span><i data-lucide="store" class="lucide-sm"></i> ${loja}</span><span class="loja-badge-total">Total: ${totalLoja} un</span></div><div>${htmlItens}</div></div>`; 
         } 
     } 
-    document.getElementById("lista-estoque-agrupada").innerHTML = html || `<div class="mensagem-vazia">Nenhum estoque para exibir.</div>`; 
+
+    let bannerAlertaHtml = "";
+    if (totalRupturas > 0 || totalBaixoEstoque > 0) {
+        bannerAlertaHtml = `
+        <div style="background:rgba(239, 68, 68, 0.08); border:1px solid rgba(239, 68, 68, 0.3); border-radius:12px; padding:14px 16px; margin-bottom:15px; text-align:left; display:flex; align-items:center; gap:12px;">
+            <i data-lucide="alert-triangle" style="color:#ef4444; width:24px; height:24px; flex-shrink:0;"></i>
+            <div style="font-size:13px; color:var(--cor-texto); line-height:1.4;">
+                <strong>Alerta Operacional:</strong> Há <span style="color:#ef4444; font-weight:bold;">${totalRupturas} itens em ruptura (0 un)</span> e <span style="color:#f59e0b; font-weight:bold;">${totalBaixoEstoque} itens em nível crítico (< 3 un)</span> nas lojas filtradas.
+            </div>
+        </div>`;
+    }
+
+    document.getElementById("lista-estoque-agrupada").innerHTML = bannerAlertaHtml + (html || `<div class='mensagem-vazia'>Nenhum estoque para exibir.</div>`); 
     atualizarTelaConferenciaEstoque(); loadIcons(); 
 }
 
@@ -1272,11 +1460,55 @@ async function executarEnvioEstoque(motivoSelecionado) {
         loadIcons();
     }
 }
-function enviarConferenciaDiaria() { localStorage.setItem('ultimaConferencia_' + usuarioLogado.id, new Date().toLocaleDateString('pt-BR')); document.getElementById('container-btn-conferencia-ok').style.display = "none"; mostrarToast("Conferência confirmada com sucesso!", "sucesso"); }
+async function enviarConferenciaDiaria() { 
+    if (!navigator.onLine) { 
+        mostrarToast("Sem internet para confirmar.", "erro"); 
+        return; 
+    }
+
+    let btn = document.getElementById('btn-conferencia-ok');
+    if(btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i data-lucide="loader-2" style="animation: spin 1s linear infinite;"></i> Registrando...';
+        loadIcons();
+    }
+
+    try {
+        // Envia o registro de conferência para o banco de dados como uma "Auditoria"
+        const { error } = await supabaseClient.from('vendas').insert([{
+            promotor_login: usuarioLogado.id,
+            loja: document.getElementById('filtro-loja-estoque') ? document.getElementById('filtro-loja-estoque').value : "Múltiplas",
+            vendedor: "Conferência Diária",
+            aparelhos_vendidos: "[Auditoria] Estoque conferido e validado sem alterações.",
+            data_venda: new Date().toISOString(),
+            status: 'Auditoria' 
+        }]);
+
+        if (error) throw error;
+
+        // Salva localmente para esconder o botão hoje
+        localStorage.setItem('ultimaConferencia_' + usuarioLogado.id, new Date().toLocaleDateString('pt-BR')); 
+        document.getElementById('container-btn-conferencia-ok').style.display = "none"; 
+        
+        mostrarToast("Conferência registrada na nuvem com sucesso!", "sucesso"); 
+        
+    } catch (e) {
+        console.error("Erro ao registrar conferência:", e);
+        mostrarToast("Erro ao registrar conferência no sistema.", "erro");
+    } finally {
+        if(btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i data-lucide="check-square" class="lucide-lg"></i> Confirmar Conferência Diária';
+            loadIcons();
+        }
+    }
+}// ==========================================
+// app.js - PARTE 8 DE 10
+// Dashboard, Filtros Dinâmicos, Métricas e Análise Avançada
 // ==========================================
-// app.js - PARTE 5 DE 6
-// Dashboards, Gráficos, Pace e Metas Inteligentes
-// ==========================================
+
+let chartHorariosPico = null;
+let chartPaceVisual = null;
 
 function forcarAtualizacaoDashboard() { 
     mostrarToast("Buscando dados atualizados...", "info"); 
@@ -1312,7 +1544,7 @@ function atualizarFiltroPromotorDash() {
 function atualizarFiltroLojaDash() {
     let selProm = document.getElementById('filtro-promotor-dash');
     let selLoja = document.getElementById('filtro-loja-dash');
-    if (!selLoja) return;
+    if (!selLoja) return; 
     
     let htmlOp = '<option value="todas">Todas as Lojas</option>';
     let lojasDaBusca = [];
@@ -1371,10 +1603,14 @@ function abrirDashboard() {
     loadIcons(); 
     document.getElementById("total-vendas-geral").innerText = "..."; 
     
-    let dtInicio = document.getElementById("dash-data-inicio") ? document.getElementById("dash-data-inicio").value : null;
-    let dtFim = document.getElementById("dash-data-fim") ? document.getElementById("dash-data-fim").value : null;
+    // TRATAMENTO BLINDADO DE DATAS PARA O SUPABASE
+    let inputDtIni = document.getElementById("dash-data-inicio");
+    let inputDtFim = document.getElementById("dash-data-fim");
     
-    let query = supabaseClient.from('vendas').select('*').neq('status', 'Cancelado');
+    let dtInicio = inputDtIni && inputDtIni.value ? inputDtIni.value : null;
+    let dtFim = inputDtFim && inputDtFim.value ? inputDtFim.value : null;
+    
+    let query = supabaseClient.from('vendas').select('*').neq('status', 'Cancelado').neq('status', 'Auditoria');
 
     if (dtInicio) { query = query.gte('data_venda', dtInicio + 'T00:00:00'); }
     if (dtFim) { query = query.lte('data_venda', dtFim + 'T23:59:59'); }
@@ -1382,13 +1618,16 @@ function abrirDashboard() {
     query.then(({ data, error }) => {
         if (error) throw error;
         
-        let dados = data.map(row => ({
-            promotor_login: row.promotor_login, 
-            loja: row.loja,
-            Vendedor: `[${row.loja}] ${row.vendedor}`,
-            Aparelhos: row.aparelhos_vendidos,
-            Data: row.data_venda
-        }));
+        let dados = (data || [])
+            // TRAVA ABSOLUTA: Remove tudo que for auditoria antes de gerar os gráficos e metas
+            .filter(row => !(row.aparelhos_vendidos || "").toUpperCase().includes('[AUDITORIA]'))
+            .map(row => ({
+                promotor_login: row.promotor_login, 
+                loja: row.loja,
+                Vendedor: `[${row.loja}] ${row.vendedor}`,
+                Aparelhos: row.aparelhos_vendidos,
+                Data: row.data_venda
+            }));
         
         dadosAcompanhamentoGlobal = dados; 
         gerarGraficos(dados);
@@ -1406,10 +1645,12 @@ function abrirDashboard() {
         loadIcons(); 
     }); 
 }
-
 function toggleComissao() { let elComissao = document.getElementById("total-comissao-geral"); let iconeOlho = document.getElementById("icone-olho-comissao"); if (elComissao.innerText === "R$ ****") { elComissao.innerText = elComissao.dataset.valor || "R$ 0,00"; iconeOlho.innerHTML = '<i data-lucide="eye-off" style="margin:0;"></i>'; } else { elComissao.innerText = "R$ ****"; iconeOlho.innerHTML = '<i data-lucide="eye" style="margin:0;"></i>'; } loadIcons(); }
 function isCampaignActiveInMonth(startStr, endStr, mesSelecionado) { return true; }
 
+// ==========================================
+// SEÇÃO DO DASHBOARD COMPLETA (GERAR GRÁFICOS)
+// ==========================================
 function gerarGraficos(dadosVendas) {
     if (!dadosVendas) dadosVendas = []; 
     let totalGeral = 0; let vendasPorLoja = {}; let vendasPorModelo = {}; let metricas = {}; let modelosFocoVendidos = {}; let rankingPorLoja = {}; 
@@ -1417,7 +1658,6 @@ function gerarGraficos(dadosVendas) {
     
     let containerSup = document.getElementById('container-filtro-supervisor-dash');
     let isSupVisible = containerSup && containerSup.style.display !== "none";
-    
     let containerProm = document.getElementById('container-filtro-promotor-dash');
     let isPromVisible = containerProm && containerProm.style.display !== "none";
 
@@ -1530,7 +1770,6 @@ function gerarGraficos(dadosVendas) {
                             }
                         });
                     }
-                    
                     if (checkPrem) { 
                         metricas[nomeAvo].realizadoPremium += 1; 
                         modelosFocoVendidos[modeloFormatado] = (modelosFocoVendidos[modeloFormatado] || 0) + 1; 
@@ -1637,24 +1876,50 @@ function gerarGraficos(dadosVendas) {
     } else {
         document.getElementById("titulo-ranking-dash").innerHTML = (agrupamento === "supervisor") ? '<i data-lucide="award"></i> Ranking de Equipes (vs Meta)' : '<i data-lucide="award"></i> Ranking de Promotores (vs Meta Individual)'; 
         promOrd = Object.keys(metricas).sort((a,b) => metricas[b].realizadoGeral - metricas[a].realizadoGeral); let rNum = 1; let uQtd = -1;
+        
+        // Pega as configurações de Gamificação da equipe
+        let supAlvoGami = (supervisorFoco !== "todos") ? supervisorFoco : "geral";
+        let configGami = (valoresComissao[supAlvoGami] && valoresComissao[supAlvoGami].gamificacao) ? valoresComissao[supAlvoGami].gamificacao : { iconeTop1: '👑', iconeMeta: '🎯', iconeFire: '🔥', minFire: 5 };
+
         promOrd.forEach(p => { 
             let m = metricas[p]; if(uQtd !== -1 && m.realizadoGeral < uQtd) rNum++; uQtd = m.realizadoGeral; let bC = rNum === 1 ? 'rank-1' : rNum === 2 ? 'rank-2' : rNum === 3 ? 'rank-3' : 'rank-outros'; let metaAlvo = m.metaIndividual; let pctHit = metaAlvo > 0 ? ((m.realizadoGeral / metaAlvo) * 100).toFixed(1) : 0; let corHit = pctHit >= 100 ? '#10b981' : '#ef4444'; let labelMetaRanking = agrupamento === "supervisor" ? "Meta Acumulada" : "Meta Individual"; let pctFocoVendedor = m.realizadoGeral > 0 ? ((m.realizadoPremium / m.realizadoGeral) * 100).toFixed(1) : 0; 
             
+            // --- INÍCIO: SISTEMA DE GAMIFICAÇÃO & GLOW ---
+            let iconesGami = "";
+            if (rNum === 1 && m.realizadoGeral > 0) iconesGami += `<span title="Top 1" style="margin-left: 6px; font-size: 16px; filter: drop-shadow(0px 0px 4px rgba(255, 215, 0, 0.8));">${configGami.iconeTop1}</span>`;
+            if (pctHit >= 100 && metaAlvo > 0) iconesGami += `<span title="Meta Batida" style="margin-left: 4px; font-size: 16px; filter: drop-shadow(0px 0px 4px rgba(16, 185, 129, 0.8));">${configGami.iconeMeta}</span>`;
+            if (m.realizadoPremium >= configGami.minFire && configGami.minFire > 0) iconesGami += `<span title="On Fire (Premium)" style="margin-left: 4px; font-size: 16px; filter: drop-shadow(0px 0px 4px rgba(245, 158, 11, 0.8));">${configGami.iconeFire}</span>`;
+            
+            // Animação CSS para quem bateu a meta (Glow effect)
+            let styleGlow = (pctHit >= 100 && metaAlvo > 0) 
+                ? "background: linear-gradient(135deg, rgba(16,185,129,0.08) 0%, transparent 100%); border: 1px solid rgba(16,185,129,0.3); border-left: 4px solid #10b981;" 
+                : "border-bottom: 1px dashed var(--border-color); border-left: 4px solid transparent;";
+            // --- FIM: SISTEMA DE GAMIFICAÇÃO & GLOW ---
+
             let htmlMetasExtras = "";
             if (m.metasLinhas && m.metasLinhas.length > 0) {
-                htmlMetasExtras += `<div style="display:flex; flex-direction:column; gap:6px; margin-top:8px; border-top:1px dashed var(--border-color); padding-top:8px;">`;
+                htmlMetasExtras += `<div style="display:flex; flex-direction:column; gap:8px; margin-top:10px; border-top:1px dashed var(--border-color); padding-top:10px;">`;
                 m.metasLinhas.forEach(ml => {
                     let real = m.realizadoLinhas[ml.linha] || 0;
+                    let pctL = ml.qtd > 0 ? Math.min(100, Math.round((real / ml.qtd) * 100)) : 0;
                     let corL = real >= ml.qtd ? '#10b981' : (real > 0 ? '#f59e0b' : 'var(--cor-secundaria)');
-                    htmlMetasExtras += `<div style="display:flex; justify-content:space-between; align-items:center; font-size:11px;">
-                        <span style="color:var(--cor-texto);">Alvo <strong style="color:var(--primary);">${ml.linha.replace(/,/g, ' + ')}</strong>:</span>
-                        <span style="background:var(--bg-fundo); color:${corL}; padding:4px 8px; border-radius:6px; font-weight:bold; border: 1px solid ${corL};">${real} / ${ml.qtd} un</span>
+                    
+                    htmlMetasExtras += `
+                    <div style="display:flex; flex-direction:column; gap:4px; font-size:11px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <span style="color:var(--cor-texto);">Alvo <strong style="color:var(--primary);">${ml.linha.replace(/,/g, ' + ')}</strong>:</span>
+                            <span style="font-weight:bold; color:${corL};">${real} / ${ml.qtd} un (${pctL}%)</span>
+                        </div>
+                        <div style="background:var(--bg-fundo); border-radius:4px; height:6px; width:100%; overflow:hidden; border:1px solid var(--border-color);">
+                            <div style="background:${corL}; width:${pctL}%; height:100%;"></div>
+                        </div>
                     </div>`;
                 });
                 htmlMetasExtras += `</div>`;
             }
 
-            htmlRank += `<div style="display:flex;flex-direction:column;padding:12px 0;border-bottom:1px dashed var(--border-color);"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><div style="display:flex;align-items:center;gap:10px;"><span class="badge-rank ${bC}">${rNum}º</span><strong style="font-size: 15px;"><i data-lucide="${agrupamento === 'supervisor' ? 'users' : 'user'}" class="lucide-sm"></i> ${p}</strong></div><span style="background:var(--bg-item);color:var(--primary);font-weight:bold;padding:4px 10px;border-radius:6px;font-size:14px;">${m.realizadoGeral} un</span></div><div style="display:flex;justify-content:space-between;font-size:11px;color:var(--cor-secundaria);background:var(--bg-item);padding:4px 8px;border-radius:4px;"><span>🎯 ${labelMetaRanking}: <strong>${metaAlvo} un</strong></span><span style="color: ${corHit}; font-weight: bold;">${pctHit}% Concluído</span></div><div style="font-size:11px; color:var(--cor-secundaria); text-align:left; padding-left:4px; margin-top:2px;">Alvo Premium/Foco: <strong style="color:#10b981;">${m.realizadoPremium} / ${m.metaPremium} un</strong></div>${htmlMetasExtras}</div>`; 
+            // HTML DO CARD MODIFICADO PARA RECEBER OS ÍCONES E O GLOW
+            htmlRank += `<div style="display:flex;flex-direction:column;padding:12px 10px; border-radius: 8px; margin-bottom: 6px; transition: all 0.3s ease; ${styleGlow}"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><div style="display:flex;align-items:center;gap:10px;"><span class="badge-rank ${bC}">${rNum}º</span><strong style="font-size: 15px; display:flex; align-items:center;"><i data-lucide="${agrupamento === 'supervisor' ? 'users' : 'user'}" class="lucide-sm"></i> ${p} ${iconesGami}</strong></div><span style="background:var(--bg-item);color:var(--primary);font-weight:bold;padding:4px 10px;border-radius:6px;font-size:14px;">${m.realizadoGeral} un</span></div><div style="display:flex;justify-content:space-between;font-size:11px;color:var(--cor-secundaria);background:var(--bg-item);padding:4px 8px;border-radius:4px;"><span>🎯 ${labelMetaRanking}: <strong>${metaAlvo} un</strong></span><span style="color: ${corHit}; font-weight: bold;">${pctHit}% Concluído</span></div><div style="font-size:11px; color:var(--cor-secundaria); text-align:left; padding-left:4px; margin-top:4px;">Alvo Premium/Foco: <strong style="color:#10b981;">${m.realizadoPremium} / ${m.metaPremium} un</strong></div>${htmlMetasExtras}</div>`; 
         });
     }
     document.getElementById("lista-ranking-promotores").innerHTML = htmlRank || "<span style='font-size:13px; color:var(--cor-secundaria);'>Nenhuma venda registrada.</span>"; loadIcons();
@@ -1670,6 +1935,40 @@ function gerarGraficos(dadosVendas) {
         let lojasSort = Object.keys(vendasPorLoja).sort((a,b) => a.localeCompare(b, undefined, {numeric:true, sensitivity:'base'})); 
         let widthLojas = Math.max(100, lojasSort.length * 18); let wrapLojas = document.getElementById('wrap-graficoVendasLoja'); if(wrapLojas) wrapLojas.style.minWidth = widthLojas + '%';
         const ctxLojas = document.getElementById('graficoVendasLoja').getContext('2d'); chartLojas = new Chart(ctxLojas, { type: 'bar', plugins: pluginsArr, data: { labels: lojasSort, datasets: [{ data: lojasSort.map(l => vendasPorLoja[l]), backgroundColor: '#10b981', borderRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, layout: { padding: { top: 20 } }, scales: { x: { ticks: { display: false }, grid: { display: false } }, y: { beginAtZero: true } }, plugins: { legend: { display: false }, tooltip: { padding: 12, callbacks: { title: function(context) { return '🏪 ' + context[0].label; }, afterTitle: function(context) { let nomePromotor = getPromotorDaLoja(context[0].label); return '👤 Promotor: ' + nomePromotor; }, label: function(context) { return 'Total Vendido: ' + context.raw + ' un'; } } }, datalabels: { anchor: 'end', align: 'top', color: corTextoGrafico, font: { weight: 'bold' }, formatter: (val) => val + ' un' } } } });
+
+        // --- ANÁLISE DE CAPA DA LOJA VS REALIZADO ---
+        let htmlCapaLojas = "";
+        for (let loja in vendasPorLoja) {
+            let vendido = vendasPorLoja[loja];
+            let capaLoja = lojasConfig[loja] && lojasConfig[loja].capa ? lojasConfig[loja].capa : 0;
+            if (capaLoja > 0) {
+                let pctCapa = Math.min(100, Math.round((vendido / capaLoja) * 100));
+                let corCapa = pctCapa >= 100 ? '#10b981' : (pctCapa >= 50 ? '#f59e0b' : '#ef4444');
+                htmlCapaLojas += `
+                <div style="display:flex; flex-direction:column; gap:4px; margin-bottom:8px; font-size:12px; background:var(--bg-item); padding:10px 12px; border-radius:8px; border:1px solid var(--border-color);">
+                    <div style="display:flex; justify-content:space-between; font-weight:bold;">
+                        <span>🏪 ${loja}</span>
+                        <span style="color:${corCapa};">${vendido} / ${capaLoja} un (${pctCapa}% da Capa)</span>
+                    </div>
+                    <div style="background:var(--bg-fundo); border-radius:4px; height:6px; width:100%; overflow:hidden; border:1px solid var(--border-color);">
+                        <div style="background:${corCapa}; width:${pctCapa}%; height:100%;"></div>
+                    </div>
+                </div>`;
+            }
+        }
+        
+        let containerCapaId = 'resumo-capa-lojas-dash';
+        let containerCapaEl = document.getElementById(containerCapaId);
+        if (!containerCapaEl && document.getElementById('wrap-graficoVendasLoja')) {
+            let wrapLojas = document.getElementById('wrap-graficoVendasLoja').parentElement.parentElement;
+            containerCapaEl = document.createElement('div');
+            containerCapaEl.id = containerCapaId;
+            containerCapaEl.style.cssText = "margin-top: 20px; border-top: 1px dashed var(--border-color); padding-top: 15px; text-align: left;";
+            wrapLojas.appendChild(containerCapaEl);
+        }
+        if (containerCapaEl) {
+            containerCapaEl.innerHTML = htmlCapaLojas ? `<h5 style="color:var(--cor-texto); margin-bottom:10px; font-size:13px;"><i data-lucide="layers" class="lucide-sm"></i> Ocupação da Capa por Loja:</h5>${htmlCapaLojas}` : "";
+        }
 
         let topModelos = Object.entries(vendasPorModelo).sort((a, b) => b[1] - a[1]); 
         const ctxModelos = document.getElementById('graficoTopModelos').getContext('2d'); 
@@ -1694,6 +1993,71 @@ function gerarGraficos(dadosVendas) {
                 } 
             } 
         });
+
+        // ==========================================
+        // NOVOS GRÁFICOS: ANÁLISE AVANÇADA
+        // ==========================================
+        if (chartHorariosPico) chartHorariosPico.destroy();
+        if (chartPaceVisual) chartPaceVisual.destroy();
+
+        let horasContador = { "08:00": 0, "09:00": 0, "10:00": 0, "11:00": 0, "12:00": 0, "13:00": 0, "14:00": 0, "15:00": 0, "16:00": 0, "17:00": 0, "18:00": 0, "19:00": 0, "20:00": 0, "21:00": 0 };
+        
+        dadosVendas.forEach(row => {
+            if (row.Data) {
+                let d = new Date(row.Data);
+                if (!isNaN(d)) {
+                    let h = String(d.getHours()).padStart(2, '0') + ":00";
+                    let qtdVendaItem = (row.Aparelhos || "").split("||").filter(x => x.trim() !== "").length;
+                    if (horasContador[h] !== undefined) {
+                        horasContador[h] += qtdVendaItem;
+                    } else {
+                        let faixa = Object.keys(horasContador).find(k => k.startsWith(String(d.getHours())));
+                        if (faixa) horasContador[faixa] += qtdVendaItem;
+                    }
+                }
+            }
+        });
+
+        const ctxHorarios = document.getElementById('graficoHorariosPico').getContext('2d');
+        chartHorariosPico = new Chart(ctxHorarios, {
+            type: 'bar',
+            plugins: pluginsArr,
+            data: {
+                labels: Object.keys(horasContador),
+                datasets: [{
+                    label: 'Vendas por Hora',
+                    data: Object.values(horasContador),
+                    backgroundColor: '#8b5cf6',
+                    borderRadius: 6
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { display: false }, datalabels: { anchor: 'end', align: 'top', color: corTextoGrafico, font: { weight: 'bold', size: 11 }, formatter: (val) => val > 0 ? val + ' un' : '' } },
+                scales: { y: { beginAtZero: true } }
+            }
+        });
+
+        let somaMetasTotal = Object.values(metricas).reduce((acc, m) => acc + m.metaIndividual, 0);
+        const ctxPace = document.getElementById('graficoPaceVisual').getContext('2d');
+        chartPaceVisual = new Chart(ctxPace, {
+            type: 'bar',
+            plugins: pluginsArr,
+            data: {
+                labels: ['Realizado até Agora', 'Projeção de Fechamento (Pace)', 'Meta Total do Mês'],
+                datasets: [{
+                    data: [totalGeral, projecaoPace, somaMetasTotal > 0 ? somaMetasTotal : totalGeral],
+                    backgroundColor: ['#0086ff', '#f59e0b', '#10b981'],
+                    borderRadius: 6
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { display: false }, datalabels: { anchor: 'end', align: 'right', color: corTextoGrafico, font: { weight: 'bold', size: 12 }, formatter: (val) => val + ' un' } },
+                scales: { x: { beginAtZero: true, suggestedMax: Math.max(somaMetasTotal, projecaoPace, totalGeral) * 1.2 } }
+            }
+        });
         
         setTimeout(() => {
             if(document.getElementById('tela-dashboard').classList.contains('ativa')) {
@@ -1706,8 +2070,8 @@ function gerarGraficos(dadosVendas) {
     } catch(errG) { console.error("Erro interno nos gráficos:", errG); }
 }
 // ==========================================
-// app.js - PARTE 6 DE 6
-// Market Share, Admin Inteligente, Batalha e Exportação
+// app.js - PARTE 9 DE 10
+// Market Share, Termômetro de Lojas e Função de Print (html2canvas)
 // ==========================================
 
 async function carregarGraficosShare() {
@@ -1939,7 +2303,38 @@ function renderizarTermometroLojas(resumoLojas) {
     loadIcons();
 }
 
-// ================= ADMIN E CONFIGURAÇÕES =================
+// ================= FUNÇÃO DE COMPARTILHAR/PRINT CORRIGIDA =================
+async function compartilharDashboard() {
+    mostrarToast("Gerando print em alta definição...", "info");
+    let elemento = document.getElementById('tela-dashboard');
+    if (!elemento) return;
+    
+    try {
+        // Aumentamos a escala para 3 e ajustamos para máxima nitidez dos gráficos e textos
+        let canvas = await html2canvas(elemento, { 
+            scale: 3, 
+            useCORS: true,
+            allowTaint: true,
+            backgroundColor: document.body.classList.contains('dark-mode') ? '#050a08' : '#f1f5f9'
+        });
+        
+        // Força o download direto para o computador, salvando na pasta de downloads sem menus automáticos
+        let link = document.createElement('a');
+        link.download = `dashboard_oppo_${new Date().toISOString().split('T')[0]}.png`;
+        link.href = canvas.toDataURL('image/png', 1.0);
+        link.click();
+        
+        mostrarToast("Print salvo no computador com sucesso!", "sucesso");
+    } catch (e) {
+        console.error("Erro ao tirar print:", e);
+        mostrarToast("Erro ao capturar tela.", "erro");
+    }
+}
+// ==========================================
+// app.js - PARTE 10 DE 10
+// Painel Admin, Modais Inteligentes, Batalha e Exportação
+// ==========================================
+
 function renderizarSelectRegioes() { let regioesUnicas = new Set(); for (let k in bancoUsuarios) { if (bancoUsuarios[k].regiao) regioesUnicas.add(bancoUsuarios[k].regiao.toUpperCase()); } let sel = document.getElementById('admin-gs-regiao-select'); if (!sel) return; let html = '<option value="">Selecione a Região...</option>'; let regioesArray = Array.from(regioesUnicas).sort(); regioesArray.forEach(r => { html += `<option value="${r}">${r}</option>`; }); html += '<option value="NOVA">➕ Criar Nova Região</option>'; sel.innerHTML = html; }
 function verificarNovaRegiao(val) { let inp = document.getElementById('admin-gs-regiao-input'); if(val === 'NOVA') { inp.style.display = 'block'; } else { inp.style.display = 'none'; inp.value = ''; } }
 
@@ -2082,14 +2477,19 @@ function adminAddAparelho() {
     mapaEmojis[n] = e; document.getElementById('admin-aparelho-nome').value = ""; document.getElementById('admin-aparelho-emoji').value = ""; renderizarAdminAparelhos(); mostrarToast("Aparelho adicionado. Clique em 'Salvar'.", "info");
 }
 
+// SUBSTITUIR NA PARTE 10
 function renderizarInputsFoco() {
     const container = document.getElementById('admin-foco-container'); const selSup = document.getElementById('seletor-foco-sup'); 
     if (!container || !selSup) return;
     let supId = selSup.value; let premiumSup = aparelhosPremium[supId] || aparelhosPremium["geral"] || {}; let taxaSup = taxasCoparticipacao[supId] || taxasCoparticipacao["geral"] || 25; let vComissaoSup = valoresComissao[supId] || valoresComissao["geral"] || {}; 
     let grupos = vComissaoSup.grupos || []; let aparelhosCfg = vComissaoSup.aparelhos || {}; let campanhasAtivas = vComissaoSup.campanhasPersonalizadas || [];
     let marcasConcorrentes = vComissaoSup.marcas_concorrentes || ["Samsung", "Motorola", "Outros"];
+    let gamificacao = vComissaoSup.gamificacao || { iconeTop1: '👑', iconeMeta: '🎯', iconeFire: '🔥', minFire: 5 };
 
     document.getElementById('input-taxa-copart').value = taxaSup;
+
+    // NOVO BLOCO DE GAMIFICAÇÃO AQUI
+    let htmlGamificacao = `<div style="background: var(--bg-item); padding: 20px; border-radius: 16px; border: 1px solid var(--border-color); margin-top: 20px; text-align: left;"><div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;"><span style="font-size: 14px; font-weight: bold; color: #ef4444;"><i data-lucide="award" class="lucide-sm"></i> Gamificação (Ranking e Troféus)</span></div><div style="display: flex; gap: 10px; flex-wrap: wrap;"><div style="flex: 1; min-width: 120px;"><span style="font-size:11px; font-weight:bold; color:var(--cor-secundaria);">Ícone Top 1:</span><input type="text" id="gami-icone-top1" value="${gamificacao.iconeTop1}" style="padding:10px; margin-top:4px;" onchange="atualizarListaPremiumGlobal()"></div><div style="flex: 1; min-width: 120px;"><span style="font-size:11px; font-weight:bold; color:var(--cor-secundaria);">Ícone Meta:</span><input type="text" id="gami-icone-meta" value="${gamificacao.iconeMeta}" style="padding:10px; margin-top:4px;" onchange="atualizarListaPremiumGlobal()"></div><div style="flex: 1; min-width: 120px;"><span style="font-size:11px; font-weight:bold; color:var(--cor-secundaria);">Ícone "On Fire":</span><input type="text" id="gami-icone-fire" value="${gamificacao.iconeFire}" style="padding:10px; margin-top:4px;" onchange="atualizarListaPremiumGlobal()"></div><div style="flex: 1; min-width: 120px;"><span style="font-size:11px; font-weight:bold; color:var(--cor-secundaria);">Premium p/ Fire:</span><input type="number" id="gami-min-fire" value="${gamificacao.minFire}" style="padding:10px; margin-top:4px;" onchange="atualizarListaPremiumGlobal()"></div></div></div>`;
 
     let htmlGrupos = '<div style="background: var(--bg-item); padding: 20px; border-radius: 16px; border: 1px solid var(--border-color); margin-top: 20px; text-align: left;"><div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;"><span style="font-size: 15px; font-weight: bold; color: #8b5cf6;"><i data-lucide="layers" class="lucide-sm"></i> Categorias de Comissionamento</span><button class="btn-acao btn-enviar" style="padding: 8px 14px; font-size: 12px; width: auto; background: #8b5cf6;" onclick="adminAddGrupo()"><i data-lucide="plus"></i> Nova Categoria</button></div>';
     if(grupos.length === 0) htmlGrupos += '<span style="font-size:12px; color:var(--cor-secundaria);">Crie categorias para somar o volume de vendas.</span>';
@@ -2137,7 +2537,41 @@ function renderizarInputsFoco() {
         htmlAparelhos += `</div></div>`;
     }
     htmlAparelhos += '</div>';
-    container.innerHTML = htmlGrupos + htmlCampanhas + htmlMarcas + htmlAparelhos; loadIcons();
+    
+    // AQUI INJETAMOS A GAMIFICAÇÃO TAMBÉM
+    container.innerHTML = htmlGamificacao + htmlGrupos + htmlCampanhas + htmlMarcas + htmlAparelhos; 
+    loadIcons();
+}
+
+function atualizarListaPremiumGlobal() {
+    let selSup = document.getElementById('seletor-foco-sup').value;
+    let taxaInputs = document.getElementById('input-taxa-copart'); if (taxaInputs) taxasCoparticipacao[selSup] = Number(taxaInputs.value);
+    
+    let pObj = {}; document.querySelectorAll('.check-foco-aparelho').forEach(cb => { if (cb.checked) pObj[cb.value] = 1; }); aparelhosPremium[selSup] = pObj;
+    if (!valoresComissao[selSup]) valoresComissao[selSup] = {};
+    
+    // SALVANDO A GAMIFICAÇÃO
+    valoresComissao[selSup].gamificacao = {
+        iconeTop1: document.getElementById('gami-icone-top1') ? document.getElementById('gami-icone-top1').value : '👑',
+        iconeMeta: document.getElementById('gami-icone-meta') ? document.getElementById('gami-icone-meta').value : '🎯',
+        iconeFire: document.getElementById('gami-icone-fire') ? document.getElementById('gami-icone-fire').value : '🔥',
+        minFire: document.getElementById('gami-min-fire') ? Number(document.getElementById('gami-min-fire').value) : 5
+    };
+
+    let campanhas = []; document.querySelectorAll('.linha-campanha-dinamica').forEach(bloco => { campanhas.push({ aparelho: bloco.querySelector('.camp-aparelho').value, promotorAlvo: bloco.querySelector('.camp-promotor').value, qtdMinima: Number(bloco.querySelector('.camp-qtd').value), bonus: Number(bloco.querySelector('.camp-valor').value) }); }); valoresComissao[selSup].campanhasPersonalizadas = campanhas;
+    
+    if(!valoresComissao[selSup].aparelhos) valoresComissao[selSup].aparelhos = {};
+    let cfgAp = valoresComissao[selSup].aparelhos;
+
+    document.querySelectorAll('.ap-tipo-regra').forEach(sel => {
+         let ap = sel.getAttribute('data-ap'); let val = sel.value; if (!cfgAp[ap]) cfgAp[ap] = {};
+         if (val === 'nenhum') { cfgAp[ap] = { tipo: 'nenhum' }; } 
+         else if (val === 'fixo') { let inputFixo = document.querySelector(`.ap-valor-fixo[data-ap="${ap}"]`); cfgAp[ap] = { tipo: 'fixo', valorFixo: inputFixo ? Number(inputFixo.value) : 0 }; } 
+         else if (val.startsWith('grupo_')) { 
+              let gId = val.replace('grupo_', ''); cfgAp[ap] = { tipo: 'grupo', grupoId: gId, valores: {} };
+              document.querySelectorAll(`.ap-valor-grupo-nivel[data-ap="${ap}"]`).forEach(inp => { let nIdx = inp.getAttribute('data-nidx'); cfgAp[ap].valores[nIdx] = Number(inp.value); });
+         }
+    });
 }
 
 function adminAddGrupo() { let selSup = document.getElementById('seletor-foco-sup').value; if (!valoresComissao[selSup]) valoresComissao[selSup] = {}; if (!valoresComissao[selSup].grupos) valoresComissao[selSup].grupos = []; valoresComissao[selSup].grupos.push({ id: 'g' + Date.now(), nome: 'Nova Categoria', niveis: [{ meta: 1 }] }); renderizarInputsFoco(); atualizarListaPremiumGlobal(); }
@@ -2176,7 +2610,6 @@ function removerLinhaCampanha(index) { let selSup = document.getElementById('sel
 
 function fecharModalEdicao() { document.getElementById('modal-edicao').classList.remove('ativo'); }
 
-// AQUI ENTRAM AS FUNÇÕES INTELIGENTES NOVAS DE METAS POR LINHA
 window.opcoesInteligentesMeta = function() {
     let options = `<option value="" disabled selected>+ Clique para adicionar modelo...</option>`;
     options += `<optgroup label="Famílias (Agrupados)">`;
