@@ -1,5 +1,6 @@
 // ==========================================
-// app.js - Lógica de Interface e Interação (PARTE 1)
+// app.js - PARTE 1 DE 4 (Corresponde à Parte 2 do envio total)
+// Variáveis Globais, Interface, Motor de Nuvem e Funções Base
 // ==========================================
 
 let lojaAtual = ""; 
@@ -24,14 +25,13 @@ let vendaParaCancelar = null;
 if (window.NodeList && !NodeList.prototype.forEach) { NodeList.prototype.forEach = Array.prototype.forEach; }
 
 window.addEventListener('offline', () => { mostrarToast("Conexão instável...", "alerta"); });
-window.addEventListener('online', () => { ocultarBotaoReconexao(); tentarReconectarAgora(); });
+window.addEventListener('online', () => { ocultarBotaoReconexao(); });
 
 document.addEventListener('DOMContentLoaded', () => {
     loadIcons();
     if(typeof inicializarAPI === "function") inicializarAPI();
 });
 
-// ================= UTILITÁRIOS E UI =================
 function mostrarBotaoReconexao() { let painel = document.getElementById('painel-erro-conexao'); if (painel) painel.style.display = 'block'; loadIcons(); }
 function ocultarBotaoReconexao() { let painel = document.getElementById('painel-erro-conexao'); if (painel) painel.style.display = 'none'; }
 
@@ -126,18 +126,15 @@ function switchTab(tabId, groupClass) {
     document.querySelectorAll(`.${groupClass}-content`).forEach(t => t.style.display = 'none'); 
     document.querySelectorAll(`.${groupClass}-btn`).forEach(b => b.classList.remove('ativo')); 
     document.getElementById(tabId).style.display = 'block'; 
-    event.currentTarget.classList.add('ativo'); 
+    if(event && event.currentTarget) event.currentTarget.classList.add('ativo'); 
     loadIcons(); 
 }
 
 if(localStorage.getItem('temaEscuro') === 'sim') { document.body.classList.add('dark-mode'); }
 
-// ================= CONEXÃO COM A NUVEM (MOTOR) =================
 if ('serviceWorker' in navigator) { 
     window.addEventListener('load', () => { 
-        navigator.serviceWorker.register('./sw.js')
-        .then(reg => { console.log('Service worker registrado!'); })
-        .catch(err => { console.log('Erro no Service Worker', err); }); 
+        navigator.serviceWorker.register('./sw.js').catch(err => { console.log('Erro no SW', err); }); 
     }); 
 }
 
@@ -172,178 +169,27 @@ async function salvarConfiguracoesGlobais(mostrarAviso = true) {
     }
 }
 
-async function carregarDadosDoBanco() {
-    const div = document.getElementById("lista-agrupada");
-    let btn = document.getElementById("btn-atualizar-acomp");
-    if(btn) btn.innerHTML = '<i data-lucide="loader-2" class="lucide-sm" style="animation: spin 2s linear infinite;"></i> Atualizando...';
-    loadIcons();
-    if(div) div.innerHTML = "Buscando dados no Supabase...";
-
-    try {
-        const { data, error } = await supabaseClient.from('vendas').select('*').neq('status', 'Cancelado').order('data_venda', { ascending: false });
-        if (error) throw error;
-
-        dadosAcompanhamentoGlobal = data.map(row => ({
-            Vendedor: `[${row.loja}] ${row.vendedor}`,
-            Aparelhos: row.aparelhos_vendidos,
-            Data: row.data_venda,
-            Status: row.status || "Realizado"
-        }));
-        if (typeof renderizarListaAcompanhamento === "function") renderizarListaAcompanhamento();
-    } catch (err) {
-        console.error(err);
-        if(div) div.innerHTML = `<p style="color:red; text-align:center;">Erro ao carregar.</p>`;
-        mostrarBotaoReconexao();
-    } finally {
-        if(btn) btn.innerHTML = '<i data-lucide="refresh-cw"></i> Atualizar';
-        loadIcons();
+// Utilitários Matemáticos e Lógicos Essenciais
+function extrairChaveAparelho(textoBruto) { 
+    let semImei = textoBruto.split("→")[0].split("(")[0].replace(/\[Motivo:.*?\]/g, "").trim().toLowerCase(); 
+    let chavesOrdenadas = Object.keys(mapaEmojis).sort((a, b) => b.length - a.length);
+    for (let i = 0; i < chavesOrdenadas.length; i++) {
+        let chave = chavesOrdenadas[i].toLowerCase();
+        if (semImei.includes(chave)) return chave;
     }
+    return semImei.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, "").trim(); 
 }
 
-async function carregarEstoqueDoBanco() {
-    let btn = document.getElementById("btn-atualizar-estoque");
-    if(btn) btn.innerHTML = '<i data-lucide="loader-2" style="animation: spin 2s linear infinite;"></i> Atualizando...';
-    loadIcons();
-    document.getElementById("lista-estoque-agrupada").innerHTML = "Buscando dados do estoque no Supabase...";
-
-    try {
-        const { data, error } = await supabaseClient.from('estoque').select('*');
-        if (error) throw error;
-
-        dadosEstoqueGlobal = data.map(row => ({
-            Loja: row.loja,
-            Aparelho: row.aparelho,
-            Quantidade: row.quantidade
-        }));
-        renderizarListaEstoque();
-    } catch (err) {
-        console.error(err);
-        document.getElementById("lista-estoque-agrupada").innerHTML = `<p style="color:red;">Erro ao carregar estoque.</p>`;
-        mostrarBotaoReconexao();
-    } finally {
-        if(btn) btn.innerHTML = '<i data-lucide="refresh-cw"></i> Atualizar Estoque';
-        loadIcons();
-    }
+function ehPremium(textoBruto, supervisorId) { 
+    let chave = extrairChaveAparelho(textoBruto); 
+    let pSup = aparelhosPremium[supervisorId]; 
+    if (!pSup || Object.keys(pSup).length === 0) pSup = aparelhosPremium["geral"] || {}; 
+    return (pSup[chave] === 1 || pSup[chave] === true); 
 }
+// ==========================================
+// app.js - PARTE 3 DE 5: Vendas, Lojas e Envio para Nuvem
+// ==========================================
 
-async function enviarParaBanco() {
-    if (!navigator.onLine) { mostrarToast("Sem internet!", "erro"); mostrarBotaoReconexao(); return; }
-    if (pendenciasVendaMultipla.length === 0) return;
-
-    const btn = document.getElementById("btn-enviar-venda");
-    btn.disabled = true;
-    btn.innerHTML = '<i data-lucide="loader-2" style="animation: spin 2s linear infinite;"></i> Enviando...';
-    loadIcons();
-
-    let vendasInsert = [];
-    let contagemEstoque = {};
-
-    pendenciasVendaMultipla.forEach(p => {
-        let nomeAparelhoFormatado = `${p.emoji} ${p.aparelho}`;
-        vendasInsert.push({
-            promotor_login: usuarioLogado.id,
-            loja: lojaAtual,
-            vendedor: p.vendedor,
-            aparelhos_vendidos: nomeAparelhoFormatado + (p.imei ? ` → IMEI: ${p.imei}` : ""),
-            data_venda: new Date().toISOString(),
-            status: 'Realizado'
-        });
-        contagemEstoque[nomeAparelhoFormatado] = (contagemEstoque[nomeAparelhoFormatado] || 0) - 1;
-    });
-
-    try {
-        const { error: errV } = await supabaseClient.from('vendas').insert(vendasInsert);
-        if (errV) throw errV;
-
-        for (let apNome in contagemEstoque) {
-             const { data: estItem } = await supabaseClient.from('estoque').select('*').eq('loja', lojaAtual).eq('aparelho', apNome).single();
-             if (estItem) {
-                 let novaQtd = (estItem.quantidade || 0) + contagemEstoque[apNome];
-                 await supabaseClient.from('estoque').update({ quantidade: novaQtd }).eq('id', estItem.id);
-             } else {
-                 await supabaseClient.from('estoque').insert({ loja: lojaAtual, aparelho: apNome, quantidade: contagemEstoque[apNome] });
-             }
-        }
-
-        mostrarToast("Vendas registradas no banco!", "sucesso");
-        limparPendentes();
-    } catch (e) {
-        console.error(e);
-        mostrarToast("Erro ao registrar venda.", "erro");
-        mostrarBotaoReconexao();
-    } finally {
-        btn.disabled = false;
-        btn.innerHTML = '<i data-lucide="send"></i> Enviar';
-        loadIcons();
-    }
-}
-
-async function executarEnvioEstoque(motivoSelecionado) {
-    if (!navigator.onLine) { mostrarToast("Sem internet!", "erro"); mostrarBotaoReconexao(); return; }
-    const btn = document.getElementById("btn-enviar-estoque");
-    btn.disabled = true;
-    btn.innerHTML = '<i data-lucide="loader-2" style="animation: spin 2s linear infinite;"></i> Atualizando...';
-    loadIcons();
-
-    let chaves = Object.keys(pendenciasEstoque).filter(k => pendenciasEstoque[k].deltaTotal !== 0);
-    let qtdAlterada = chaves.length;
-
-    try {
-        for (let i = 0; i < chaves.length; i++) {
-            let p = pendenciasEstoque[chaves[i]];
-            const { data: estItem } = await supabaseClient.from('estoque').select('*').eq('loja', p.loja).eq('aparelho', p.aparelho).single();
-            if (estItem) {
-                await supabaseClient.from('estoque').update({ quantidade: p.novaQtd }).eq('id', estItem.id);
-            } else {
-                await supabaseClient.from('estoque').insert({ loja: p.loja, aparelho: p.aparelho, quantidade: p.novaQtd });
-            }
-        }
-        localStorage.setItem('ultimaConferencia_' + usuarioLogado.id, new Date().toLocaleDateString('pt-BR'));
-        mostrarToast(`Correção Enviada!<br>${qtdAlterada} modelos alterados.`, "sucesso");
-        carregarEstoqueDoBanco();
-    } catch (e) {
-        console.error(e);
-        mostrarToast("Erro ao atualizar estoque.", "erro");
-        mostrarBotaoReconexao();
-    } finally {
-        btn.disabled = false;
-        btn.innerHTML = '<i data-lucide="upload-cloud"></i> Enviar Atualização';
-        loadIcons();
-    }
-}
-
-function enviarConferenciaDiaria() {
-    localStorage.setItem('ultimaConferencia_' + usuarioLogado.id, new Date().toLocaleDateString('pt-BR'));
-    document.getElementById('container-btn-conferencia-ok').style.display = "none";
-    mostrarToast("Conferência confirmada com sucesso!", "sucesso");
-}
-
-async function carregarHistoricoDoBanco(forcarNuvem = false) {
-    const div = document.getElementById("lista-historico");
-    if (!forcarNuvem && dadosHistoricoGlobal.length > 0) { renderizarListaHistorico(); return; }
-    div.innerHTML = '<i data-lucide="loader-2" class="lucide-sm" style="animation: spin 2s linear infinite;"></i> Carregando nuvem...';
-    loadIcons();
-
-    try {
-        const { data, error } = await supabaseClient.from('vendas').select('*').order('data_venda', { ascending: false }).limit(500);
-        if (error) throw error;
-
-        dadosHistoricoGlobal = data.map(row => ({
-            Tipo: "Venda",
-            Status: row.status || "Realizado",
-            Data: row.data_venda,
-            Promotor: row.promotor_login,
-            Detalhe: `Venda: ${row.aparelhos_vendidos} | [${row.loja}] ${row.vendedor}`
-        }));
-        renderizarListaHistorico();
-    } catch (e) {
-        console.error(e);
-        div.innerHTML = "Erro ao carregar histórico.";
-        mostrarBotaoReconexao();
-    }
-}
-
-// ================= VENDAS E LOJAS =================
 function irParaVendas() {
     let adminRole = (usuarioLogado.cargo === "gestor" || usuarioLogado.cargo === "regional" || usuarioLogado.id === "master" || usuarioLogado.cargo === "supervisor");
     if (adminRole) { 
@@ -487,7 +333,61 @@ function atualizarTelaConferencia() {
 
 function limparPendentes() { pendenciasVendaMultipla = []; atualizarTelaConferencia(); }
 
-// ================= ACOMPANHAMENTO E EMOJIS BADGES =================
+async function enviarParaBanco() {
+    if (!navigator.onLine) { mostrarToast("Sem internet!", "erro"); mostrarBotaoReconexao(); return; }
+    if (pendenciasVendaMultipla.length === 0) return;
+
+    const btn = document.getElementById("btn-enviar-venda");
+    btn.disabled = true;
+    btn.innerHTML = '<i data-lucide="loader-2" style="animation: spin 2s linear infinite;"></i> Enviando...';
+    loadIcons();
+
+    let vendasInsert = [];
+    let contagemEstoque = {};
+
+    pendenciasVendaMultipla.forEach(p => {
+        let nomeAparelhoFormatado = `${p.emoji} ${p.aparelho}`;
+        vendasInsert.push({
+            promotor_login: usuarioLogado.id,
+            loja: lojaAtual,
+            vendedor: p.vendedor,
+            aparelhos_vendidos: nomeAparelhoFormatado + (p.imei ? ` → IMEI: ${p.imei}` : ""),
+            data_venda: new Date().toISOString(),
+            status: 'Realizado'
+        });
+        contagemEstoque[nomeAparelhoFormatado] = (contagemEstoque[nomeAparelhoFormatado] || 0) - 1;
+    });
+
+    try {
+        const { error: errV } = await supabaseClient.from('vendas').insert(vendasInsert);
+        if (errV) throw errV;
+
+        for (let apNome in contagemEstoque) {
+             const { data: estItem } = await supabaseClient.from('estoque').select('*').eq('loja', lojaAtual).eq('aparelho', apNome).single();
+             if (estItem) {
+                 let novaQtd = (estItem.quantidade || 0) + contagemEstoque[apNome];
+                 await supabaseClient.from('estoque').update({ quantidade: novaQtd }).eq('id', estItem.id);
+             } else {
+                 await supabaseClient.from('estoque').insert({ loja: lojaAtual, aparelho: apNome, quantidade: contagemEstoque[apNome] });
+             }
+        }
+
+        mostrarToast("Vendas registradas no banco!", "sucesso");
+        limparPendentes();
+    } catch (e) {
+        console.error(e);
+        mostrarToast("Erro ao registrar venda.", "erro");
+        mostrarBotaoReconexao();
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i data-lucide="send"></i> Enviar';
+        loadIcons();
+    }
+}
+// ==========================================
+// app.js - PARTE 4 DE 5: Acompanhamento e Histórico
+// ==========================================
+
 function abrirAcompanhamento() { 
     mudarTela('tela-acompanhamento'); 
     if (usuarioLogado.cargo === "gestor" || usuarioLogado.cargo === "regional" || usuarioLogado.id === "master") { 
@@ -633,7 +533,308 @@ function renderizarListaAcompanhamento() {
     } 
     div.innerHTML = html; loadIcons();
 }
-// ================= ESTOQUE & MOSTRUÁRIO =================
+
+async function carregarDadosDoBanco() {
+    const div = document.getElementById("lista-agrupada");
+    let btn = document.getElementById("btn-atualizar-acomp");
+    if(btn) btn.innerHTML = '<i data-lucide="loader-2" class="lucide-sm" style="animation: spin 2s linear infinite;"></i> Atualizando...';
+    loadIcons();
+    if(div) div.innerHTML = "Buscando dados no Supabase...";
+
+    try {
+        const { data, error } = await supabaseClient.from('vendas').select('*').neq('status', 'Cancelado').order('data_venda', { ascending: false });
+        if (error) throw error;
+
+        dadosAcompanhamentoGlobal = data.map(row => ({
+            Vendedor: `[${row.loja}] ${row.vendedor}`,
+            Aparelhos: row.aparelhos_vendidos,
+            Data: row.data_venda,
+            Status: row.status || "Realizado"
+        }));
+        if (typeof renderizarListaAcompanhamento === "function") renderizarListaAcompanhamento();
+    } catch (err) {
+        console.error(err);
+        if(div) div.innerHTML = `<p style="color:red; text-align:center;">Erro ao carregar.</p>`;
+        mostrarBotaoReconexao();
+    } finally {
+        if(btn) btn.innerHTML = '<i data-lucide="refresh-cw"></i> Atualizar';
+        loadIcons();
+    }
+}
+
+// AQUI ESTÃO AS FUNÇÕES DE ABERTURA DO HISTÓRICO CORRIGIDAS!
+function abrirHistorico(tipo) { 
+    tipoHistoricoAtual = tipo; 
+    mudarTela('tela-historico'); 
+    
+    let selSup = document.getElementById('filtro-sup-historico'); 
+    if (usuarioLogado.cargo === "gestor" || usuarioLogado.cargo === "regional" || usuarioLogado.id === "master") { 
+        document.getElementById('container-filtro-sup-historico').style.display = "block"; 
+        let htmlOp = '<option value="todos">Todas as Regiões</option>'; 
+        for(let k in bancoUsuarios) { 
+            if(bancoUsuarios[k].cargo === "supervisor" && podeGerenciar(usuarioLogado, k)) { 
+                htmlOp += `<option value="${k}">Equipe: ${bancoUsuarios[k].nome || k}</option>`; 
+            } 
+        } 
+        selSup.innerHTML = htmlOp; 
+    } else { 
+        document.getElementById('container-filtro-sup-historico').style.display = "none"; 
+    } 
+    
+    mudouSupHistorico(); 
+    carregarHistoricoDoBanco(); 
+}
+
+function mudouSupHistorico() { 
+    let selSup = document.getElementById('filtro-sup-historico').value; 
+    let selProm = document.getElementById('filtro-promotor-historico'); 
+    let htmlOp = '<option value="todos">Todos da Equipe</option>'; 
+    let supAlvo = (usuarioLogado.cargo === "supervisor") ? usuarioLogado.id : selSup; 
+    
+    if (supAlvo && supAlvo !== "todos") { 
+        for(let k in bancoUsuarios) { 
+            if(bancoUsuarios[k].cargo === "promotor" && bancoUsuarios[k].criadoPor === supAlvo) { 
+                htmlOp += `<option value="${k}">${bancoUsuarios[k].nome || k}</option>`; 
+            } 
+        } 
+    } 
+    selProm.innerHTML = htmlOp; 
+    aplicarFiltroHistorico(); 
+}
+
+async function carregarHistoricoDoBanco(forcarNuvem = false) {
+    const div = document.getElementById("lista-historico");
+    if (!forcarNuvem && dadosHistoricoGlobal.length > 0) { renderizarListaHistorico(); return; }
+    div.innerHTML = '<i data-lucide="loader-2" class="lucide-sm" style="animation: spin 2s linear infinite;"></i> Carregando nuvem...';
+    loadIcons();
+
+    try {
+        const { data, error } = await supabaseClient.from('vendas').select('*').order('data_venda', { ascending: false }).limit(500);
+        if (error) throw error;
+
+        // ESTRUTURA BLINDADA PARA ESTORNO
+        dadosHistoricoGlobal = data.map(row => ({
+            id_banco: row.id, 
+            Tipo: row.status === 'Auditoria' ? 'Auditoria' : 'Venda',
+            Status: row.status || "Realizado",
+            Data: row.data_venda,
+            Promotor: row.promotor_login,
+            loja_banco: row.loja,
+            aparelhos_banco: row.aparelhos_vendidos,
+            Detalhe: row.status === 'Auditoria' ? row.aparelhos_vendidos : `Venda: ${row.aparelhos_vendidos} | [${row.loja}] ${row.vendedor}`
+        }));
+        renderizarListaHistorico();
+    } catch (e) {
+        console.error(e);
+        div.innerHTML = "Erro ao carregar histórico.";
+        mostrarBotaoReconexao();
+    }
+}
+
+async function executarCancelamentoVenda() {
+    if (!vendaParaCancelar) return;
+    
+    let venda = dadosHistoricoGlobal[vendaParaCancelar.index]; 
+    if (!venda.id_banco) return mostrarToast("Erro: ID da venda não encontrado.", "erro");
+
+    mostrarToast("Iniciando estorno...", "info");
+
+    try {
+        const { error: errUpdate } = await supabaseClient.from('vendas').update({ status: 'Cancelado' }).eq('id', venda.id_banco);
+        if (errUpdate) throw errUpdate;
+
+        let loja = venda.loja_banco; 
+        let listaAparelhos = venda.aparelhos_banco.split("||").map(x => x.trim()).filter(x => x !== "");
+        
+        let contagemEstoqueDevolucao = {};
+        listaAparelhos.forEach(ap => {
+            let nomeLimpo = ap.split(" →")[0].trim();
+            contagemEstoqueDevolucao[nomeLimpo] = (contagemEstoqueDevolucao[nomeLimpo] || 0) + 1;
+        });
+
+        for (let apNome in contagemEstoqueDevolucao) {
+            const { data: estItem } = await supabaseClient.from('estoque').select('*').eq('loja', loja).eq('aparelho', apNome).single();
+            if (estItem) {
+                let novaQtd = (estItem.quantidade || 0) + contagemEstoqueDevolucao[apNome];
+                await supabaseClient.from('estoque').update({ quantidade: novaQtd }).eq('id', estItem.id);
+            }
+        }
+        
+        mostrarToast("Venda cancelada e estoque estornado com sucesso!", "sucesso");
+        carregarHistoricoDoBanco(true); 
+        
+    } catch (e) {
+        console.error("Erro no cancelamento:", e);
+        mostrarToast("Erro ao estornar a venda.", "erro");
+    } finally {
+        vendaParaCancelar = null;
+    }
+}
+
+async function executarDesfazerCancelamento(indexHist) {
+    let venda = dadosHistoricoGlobal[indexHist]; 
+    if (!venda || !venda.id_banco) return mostrarToast("Erro: ID da venda não encontrado.", "erro");
+
+    mostrarToast("Revertendo estorno...", "info");
+
+    try {
+        const { error: errUpdate } = await supabaseClient.from('vendas').update({ status: 'Realizado' }).eq('id', venda.id_banco);
+        if (errUpdate) throw errUpdate;
+
+        let loja = venda.loja_banco; 
+        let listaAparelhos = venda.aparelhos_banco.split("||").map(x => x.trim()).filter(x => x !== "");
+        
+        let contagemEstoqueRetirada = {};
+        listaAparelhos.forEach(ap => {
+            let nomeLimpo = ap.split(" →")[0].trim();
+            contagemEstoqueRetirada[nomeLimpo] = (contagemEstoqueRetirada[nomeLimpo] || 0) + 1;
+        });
+
+        for (let apNome in contagemEstoqueRetirada) {
+            const { data: estItem } = await supabaseClient.from('estoque').select('*').eq('loja', loja).eq('aparelho', apNome).single();
+            if (estItem) {
+                let novaQtd = (estItem.quantidade || 0) - contagemEstoqueRetirada[apNome];
+                if(novaQtd < 0) novaQtd = 0;
+                await supabaseClient.from('estoque').update({ quantidade: novaQtd }).eq('id', estItem.id);
+            }
+        }
+        
+        mostrarToast("Estorno revertido com sucesso!", "sucesso");
+        carregarHistoricoDoBanco(true); 
+    } catch (e) {
+        console.error("Erro ao desfazer:", e);
+        mostrarToast("Erro ao desfazer o estorno.", "erro");
+    }
+}
+
+function abrirModalCancelarVenda(indexHist, pLogin) { 
+    vendaParaCancelar = { index: indexHist, login: pLogin }; 
+    let inputSenha = document.getElementById('senha-confirmacao-cancelamento'); 
+    if (inputSenha) inputSenha.value = ""; 
+    let modal = document.getElementById('modal-cancelar-venda'); 
+    if (modal) modal.classList.add('ativo'); 
+}
+
+function fecharModalCancelarVenda() { 
+    let modal = document.getElementById('modal-cancelar-venda'); 
+    if (modal) modal.classList.remove('ativo'); 
+    vendaParaCancelar = null; 
+}
+
+function validarECancelarVenda() { 
+    let inputSenha = document.getElementById('senha-confirmacao-cancelamento'); 
+    let senhaDigitada = inputSenha ? inputSenha.value.trim() : ""; 
+    if (senhaDigitada !== usuarioLogado.senha && usuarioLogado.id !== "master") { 
+        return mostrarToast("Senha incorreta. Estorno negado.", "erro"); 
+    } 
+    if(inputSenha) inputSenha.value = ""; 
+    let modal = document.getElementById('modal-cancelar-venda'); 
+    if (modal) modal.classList.remove('ativo'); 
+    executarCancelamentoVenda(); 
+}
+
+let limiteHistorico = 50; 
+function aplicarFiltroHistorico() { limiteHistorico = 50; renderizarListaHistorico(); }
+
+function renderizarListaHistorico() { 
+    const div = document.getElementById("lista-historico"); 
+    let dataInicio = document.getElementById('filtro-data-inicio-historico') ? document.getElementById('filtro-data-inicio-historico').value : ""; 
+    let dataFim = document.getElementById('filtro-data-fim-historico') ? document.getElementById('filtro-data-fim-historico').value : ""; 
+    let supAlvo = (usuarioLogado.cargo === "supervisor") ? usuarioLogado.id : document.getElementById('filtro-sup-historico').value; 
+    let promAlvo = document.getElementById('filtro-promotor-historico').value; 
+    let ocultarCancelados = document.getElementById('filtro-ocultar-cancelados') ? document.getElementById('filtro-ocultar-cancelados').checked : false; 
+    let apenasCancelados = document.getElementById('filtro-apenas-cancelados') ? document.getElementById('filtro-apenas-cancelados').checked : false; 
+    
+    if(apenasCancelados) { 
+        if(document.getElementById('filtro-ocultar-cancelados')) document.getElementById('filtro-ocultar-cancelados').checked = false; 
+        ocultarCancelados = false; 
+    } 
+    
+    let filtrados = []; 
+    dadosHistoricoGlobal.forEach((row, index) => { 
+        let isCancelado = row.Status === "Cancelado"; 
+        
+        if (ocultarCancelados && isCancelado) return; 
+        if (apenasCancelados && row.Tipo !== 'Auditoria' && !isCancelado) return; 
+        
+        let isEstoque = row.Tipo === 'Auditoria'; 
+        if (tipoHistoricoAtual === 'estoque' && !isEstoque) return; 
+        if (tipoHistoricoAtual === 'geral' && isEstoque) return; 
+        
+        if (usuarioLogado.id !== "master" && row.Promotor !== usuarioLogado.id) { 
+            if (!podeGerenciar(usuarioLogado, row.Promotor)) return; 
+        } 
+        
+        let pObj = bancoUsuarios[row.Promotor]; 
+        if (supAlvo && supAlvo !== "todos") { 
+            if (row.Promotor !== supAlvo && (!pObj || pObj.criadoPor !== supAlvo)) return; 
+        } 
+        if (promAlvo && promAlvo !== "todos" && row.Promotor !== promAlvo) return; 
+        
+        if(dataInicio && row.Data) { 
+            let dt = new Date(dataInicio + "T00:00:00"); 
+            if(new Date(row.Data) < dt) return; 
+        } 
+        if(dataFim && row.Data) { 
+            let dt = new Date(dataFim + "T23:59:59"); 
+            if(new Date(row.Data) > dt) return; 
+        } 
+        
+        filtrados.push({row: row, originalIndex: index, pLogin: row.Promotor, isEstoque: isEstoque, detalhe: row.Detalhe, isCancelado: isCancelado, dataLinha: row.Data}); 
+    }); 
+    
+    let filtrados_total = filtrados.length; 
+    filtrados = filtrados.slice(0, limiteHistorico); 
+    
+    if(filtrados_total === 0) { 
+        div.innerHTML = "<div class='mensagem-vazia'>Nenhuma ação encontrada.</div>"; 
+        return; 
+    } 
+    
+    let html = ""; 
+    filtrados.forEach(item => { 
+        let dataFormatada = "Sem Data"; 
+        if (item.dataLinha) { 
+            let d = new Date(item.dataLinha); 
+            if(!isNaN(d)) dataFormatada = d.toLocaleDateString('pt-BR') + ' às ' + d.toLocaleTimeString('pt-BR').slice(0, 5); 
+        } 
+        
+        let nomePromotor = bancoUsuarios[item.pLogin] ? bancoUsuarios[item.pLogin].nome : item.pLogin; 
+        if (!nomePromotor) nomePromotor = "Usuário Desconhecido"; 
+        
+        let textoDetalheLimpo = item.detalhe.replace(/\[CANCELADO\]/ig, '').trim(); 
+        let opacidade = item.isCancelado ? "opacity: 0.7; filter: grayscale(0.8);" : ""; 
+        let bgCard = item.isCancelado ? "background: var(--bg-fundo);" : "background: var(--bg-card);"; 
+        let bordaCard = item.isCancelado ? "border: 1px dashed #ef4444;" : "border: 1px solid var(--border-color);"; 
+        let estiloTexto = item.isCancelado ? "text-decoration: line-through; color: var(--cor-secundaria);" : "color: var(--cor-texto);"; 
+        let badgeCancelado = item.isCancelado ? `<div style="background: #fee2e2; color: #ef4444; padding: 4px 8px; border-radius: 6px; font-size: 10px; font-weight: bold; margin-bottom: 8px; display: inline-block;">ESTORNADO</div>` : ""; 
+        let icone = item.isEstoque ? '<i data-lucide="package" style="color:#f59e0b;" class="lucide-sm"></i>' : '<i data-lucide="shopping-bag" style="color:#10b981;" class="lucide-sm"></i>'; 
+        if (item.isCancelado) icone = '<i data-lucide="slash" style="color: #ef4444;" class="lucide-sm"></i>'; 
+        
+        let btnAcao = ""; 
+        let adminRole = (usuarioLogado.cargo === "supervisor" || usuarioLogado.cargo === "regional" || usuarioLogado.cargo === "gestor" || usuarioLogado.id === "master"); 
+        
+        if (tipoHistoricoAtual === 'geral' && adminRole && !item.isEstoque) { 
+            if (!item.isCancelado) { 
+                btnAcao = `<button onclick="abrirModalCancelarVenda(${item.originalIndex}, '${item.pLogin}')" style="background: transparent; color: #ef4444; border: 1px solid rgba(239,68,68,0.3); padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: bold; cursor: pointer;"><i data-lucide="x-circle" class="lucide-sm"></i> Cancelar</button>`; 
+            } else { 
+                btnAcao = `<button onclick="executarDesfazerCancelamento(${item.originalIndex})" style="background: var(--bg-item); color: #10b981; border: 1px solid rgba(16,185,129,0.3); padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: bold; cursor: pointer;"><i data-lucide="rotate-ccw" class="lucide-sm"></i> Desfazer</button>`; 
+            } 
+        } 
+        
+        html += `<div style="${opacidade} ${bgCard} ${bordaCard} padding: 16px; border-radius: 12px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 8px;">${badgeCancelado}<div style="display: flex; justify-content: space-between; align-items:center;"><span style="font-size:12px; font-weight:bold; color:var(--cor-secundaria);">${dataFormatada}</span><span style="font-size: 13px; font-weight:bold; color:var(--primary);"><i data-lucide="user" class="lucide-sm"></i> ${nomePromotor}</span></div><div style="font-size:14px; ${estiloTexto} display: flex; align-items: flex-start; justify-content: space-between; gap:8px;"><div style="display: flex; align-items: flex-start; gap: 8px;">${icone} <span>${textoDetalheLimpo}</span></div></div><div style="display: flex; justify-content: flex-end; margin-top: 4px;">${btnAcao}</div></div>`; 
+    }); 
+    
+    div.innerHTML = html; loadIcons(); 
+    if (filtrados_total > limiteHistorico) { 
+        div.innerHTML += `<button class="btn-sistema" style="margin-top: 15px; background: var(--bg-item); color: var(--primary); border: 1px solid var(--primary);" onclick="limiteHistorico += 50; renderizarListaHistorico();">Carregar mais históricos...</button>`; 
+    } 
+}
+// ==========================================
+// app.js - PARTE 5 DE 5: Estoque, Dashboards, Admin e Batalha
+// ==========================================
+
+// ================= MOSTRUÁRIO E ESTOQUE =================
 function fecharModalConfirmMostruario() { document.getElementById('modal-confirm-mostruario').classList.remove('ativo'); mostruarioEmEdicao = null; }
 function fecharModalPromptMostruario() { document.getElementById('modal-prompt-mostruario').classList.remove('ativo'); mostruarioEmEdicao = null; }
 
@@ -674,6 +875,32 @@ function abrirEstoque() {
     promotorEstoqueFiltroAtual = (usuarioLogado.cargo === "gestor" || usuarioLogado.cargo === "regional" || usuarioLogado.id === "master") ? "todos" : usuarioLogado.id; 
     renderizarFiltroPromotoresEstoque(); 
     carregarEstoqueDoBanco(); 
+}
+
+async function carregarEstoqueDoBanco() {
+    let btn = document.getElementById("btn-atualizar-estoque");
+    if(btn) btn.innerHTML = '<i data-lucide="loader-2" style="animation: spin 2s linear infinite;"></i> Atualizando...';
+    loadIcons();
+    document.getElementById("lista-estoque-agrupada").innerHTML = "Buscando dados do estoque no Supabase...";
+
+    try {
+        const { data, error } = await supabaseClient.from('estoque').select('*');
+        if (error) throw error;
+
+        dadosEstoqueGlobal = data.map(row => ({
+            Loja: row.loja,
+            Aparelho: row.aparelho,
+            Quantidade: row.quantidade
+        }));
+        renderizarListaEstoque();
+    } catch (err) {
+        console.error(err);
+        document.getElementById("lista-estoque-agrupada").innerHTML = `<p style="color:red;">Erro ao carregar estoque.</p>`;
+        mostrarBotaoReconexao();
+    } finally {
+        if(btn) btn.innerHTML = '<i data-lucide="refresh-cw"></i> Atualizar Estoque';
+        loadIcons();
+    }
 }
 
 function renderizarFiltroPromotoresEstoque() { 
@@ -865,156 +1092,61 @@ function atualizarTelaConferenciaEstoque() {
 }
 
 function limparConferenciaEstoque() { renderizarListaEstoque(); }
-function verificarMotivoEstoque() { let chaves = Object.keys(pendenciasEstoque).filter(k => pendenciasEstoque[k].deltaTotal !== 0); if (chaves.length === 0) return; let adminRole = (usuarioLogado.cargo === "supervisor" || usuarioLogado.cargo === "regional" || usuarioLogado.cargo === "gestor" || usuarioLogado.id === "master"); if (adminRole) { executarEnvioEstoque("Ajuste Gerencial"); } else { document.getElementById('modal-motivo-estoque').classList.add('ativo'); } }
-function confirmarEnvioEstoqueMotivo() { document.getElementById('modal-motivo-estoque').classList.remove('ativo'); let motivoSelecionado = document.getElementById('select-motivo-estoque').value; executarEnvioEstoque(motivoSelecionado); }
+function verificarMotivoEstoque() { 
+    let chaves = Object.keys(pendenciasEstoque).filter(k => pendenciasEstoque[k].deltaTotal !== 0); 
+    if (chaves.length === 0) return; 
+    let adminRole = (usuarioLogado.cargo === "supervisor" || usuarioLogado.cargo === "regional" || usuarioLogado.cargo === "gestor" || usuarioLogado.id === "master"); 
+    if (adminRole) { executarEnvioEstoque("Ajuste Gerencial"); } else { document.getElementById('modal-motivo-estoque').classList.add('ativo'); } 
+}
+function confirmarEnvioEstoqueMotivo() { document.getElementById('modal-motivo-estoque').classList.remove('ativo'); executarEnvioEstoque(document.getElementById('select-motivo-estoque').value); }
 
-// ================= HISTÓRICO =================
-function extrairChaveAparelho(textoBruto) { 
-    let semImei = textoBruto.split("→")[0].split("(")[0].replace(/\[Motivo:.*?\]/g, "").trim().toLowerCase(); 
-    
-    // MÁGICA ANTI-COLISÃO (Ex: a6x não vira a6)
-    let chavesOrdenadas = Object.keys(mapaEmojis).sort((a, b) => b.length - a.length);
-    for (let i = 0; i < chavesOrdenadas.length; i++) {
-        let chave = chavesOrdenadas[i].toLowerCase();
-        if (semImei.includes(chave)) return chave;
+async function executarEnvioEstoque(motivoSelecionado) {
+    if (!navigator.onLine) { mostrarToast("Sem internet!", "erro"); mostrarBotaoReconexao(); return; }
+    const btn = document.getElementById("btn-enviar-estoque");
+    btn.disabled = true;
+    btn.innerHTML = '<i data-lucide="loader-2" style="animation: spin 2s linear infinite;"></i> Atualizando...';
+    loadIcons();
+
+    let chaves = Object.keys(pendenciasEstoque).filter(k => pendenciasEstoque[k].deltaTotal !== 0);
+    let qtdAlterada = chaves.length;
+
+    try {
+        for (let i = 0; i < chaves.length; i++) {
+            let p = pendenciasEstoque[chaves[i]];
+            const { data: estItem } = await supabaseClient.from('estoque').select('*').eq('loja', p.loja).eq('aparelho', p.aparelho).single();
+            
+            if (estItem) {
+                await supabaseClient.from('estoque').update({ quantidade: p.novaQtd }).eq('id', estItem.id);
+            } else {
+                await supabaseClient.from('estoque').insert({ loja: p.loja, aparelho: p.aparelho, quantidade: p.novaQtd });
+            }
+
+            // CRIA O LOG DE AUDITORIA NO BANCO DE VENDAS
+            await supabaseClient.from('vendas').insert([{
+                promotor_login: usuarioLogado.id,
+                loja: p.loja,
+                vendedor: motivoSelecionado || "Ajuste Manual",
+                aparelhos_vendidos: `[Auditoria] ${p.aparelho}: De ${p.qtdOriginal} para ${p.novaQtd} un`,
+                data_venda: new Date().toISOString(),
+                status: 'Auditoria' 
+            }]);
+        }
+        localStorage.setItem('ultimaConferencia_' + usuarioLogado.id, new Date().toLocaleDateString('pt-BR'));
+        mostrarToast(`Correção Enviada!<br>${qtdAlterada} modelos alterados.`, "sucesso");
+        carregarEstoqueDoBanco();
+    } catch (e) {
+        console.error(e);
+        mostrarToast("Erro ao atualizar estoque.", "erro");
+        mostrarBotaoReconexao();
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i data-lucide="upload-cloud"></i> Enviar Atualização';
+        loadIcons();
     }
-    
-    return semImei.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, "").trim(); 
 }
+function enviarConferenciaDiaria() { localStorage.setItem('ultimaConferencia_' + usuarioLogado.id, new Date().toLocaleDateString('pt-BR')); document.getElementById('container-btn-conferencia-ok').style.display = "none"; mostrarToast("Conferência confirmada com sucesso!", "sucesso"); }
 
-function ehPremium(textoBruto, supervisorId) { let chave = extrairChaveAparelho(textoBruto); let pSup = aparelhosPremium[supervisorId]; if (!pSup || Object.keys(pSup).length === 0) pSup = aparelhosPremium["geral"] || {}; return (pSup[chave] === 1 || pSup[chave] === true); }
-function abrirHistorico(tipo) { tipoHistoricoAtual = tipo; mudarTela('tela-historico'); let selSup = document.getElementById('filtro-sup-historico'); if (usuarioLogado.cargo === "gestor" || usuarioLogado.cargo === "regional" || usuarioLogado.id === "master") { document.getElementById('container-filtro-sup-historico').style.display = "block"; let htmlOp = '<option value="todos">Todas as Regiões</option>'; for(let k in bancoUsuarios) { if(bancoUsuarios[k].cargo === "supervisor" && podeGerenciar(usuarioLogado, k)) { htmlOp += `<option value="${k}">Equipe: ${bancoUsuarios[k].nome || k}</option>`; } } selSup.innerHTML = htmlOp; } else { document.getElementById('container-filtro-sup-historico').style.display = "none"; } mudouSupHistorico(); carregarHistoricoDoBanco(); }
-function mudouSupHistorico() { let selSup = document.getElementById('filtro-sup-historico').value; let selProm = document.getElementById('filtro-promotor-historico'); let htmlOp = '<option value="todos">Todos da Equipe</option>'; let supAlvo = (usuarioLogado.cargo === "supervisor") ? usuarioLogado.id : selSup; if (supAlvo && supAlvo !== "todos") { for(let k in bancoUsuarios) { if(bancoUsuarios[k].cargo === "promotor" && bancoUsuarios[k].criadoPor === supAlvo) { htmlOp += `<option value="${k}">${bancoUsuarios[k].nome || k}</option>`; } } } selProm.innerHTML = htmlOp; aplicarFiltroHistorico(); }
-
-let limiteHistorico = 50; 
-function aplicarFiltroHistorico() { limiteHistorico = 50; renderizarListaHistorico(); }
-
-function abrirModalCancelarVenda(indexHist, pLogin) { 
-    vendaParaCancelar = { index: indexHist, login: pLogin }; 
-    let inputSenha = document.getElementById('senha-confirmacao-cancelamento'); 
-    if (inputSenha) inputSenha.value = ""; 
-    let modal = document.getElementById('modal-cancelar-venda'); 
-    if (modal) modal.classList.add('ativo'); 
-}
-
-function fecharModalCancelarVenda() { 
-    let modal = document.getElementById('modal-cancelar-venda'); 
-    if (modal) modal.classList.remove('ativo'); 
-    vendaParaCancelar = null; 
-}
-
-function validarECancelarVenda() { 
-    let inputSenha = document.getElementById('senha-confirmacao-cancelamento'); 
-    let senhaDigitada = inputSenha ? inputSenha.value.trim() : ""; 
-    if (senhaDigitada !== usuarioLogado.senha && usuarioLogado.id !== "master") { 
-        return mostrarToast("Senha incorreta. Estorno negado.", "erro"); 
-    } 
-    if(inputSenha) inputSenha.value = ""; 
-    let modal = document.getElementById('modal-cancelar-venda'); 
-    if (modal) modal.classList.remove('ativo'); 
-    executarCancelamentoVenda(); 
-}
-
-function renderizarListaHistorico() { 
-    const div = document.getElementById("lista-historico"); 
-    let dataInicio = document.getElementById('filtro-data-inicio-historico').value; 
-    let dataFim = document.getElementById('filtro-data-fim-historico').value; 
-    let supAlvo = (usuarioLogado.cargo === "supervisor") ? usuarioLogado.id : document.getElementById('filtro-sup-historico').value; 
-    let promAlvo = document.getElementById('filtro-promotor-historico').value; 
-    let ocultarCancelados = document.getElementById('filtro-ocultar-cancelados') ? document.getElementById('filtro-ocultar-cancelados').checked : false; 
-    let apenasCancelados = document.getElementById('filtro-apenas-cancelados') ? document.getElementById('filtro-apenas-cancelados').checked : false; 
-    
-    if(apenasCancelados) { 
-        document.getElementById('filtro-ocultar-cancelados').checked = false; 
-        ocultarCancelados = false; 
-    } 
-    
-    let filtrados = []; 
-    dadosHistoricoGlobal.forEach((row, index) => { 
-        if (row.excluidoApp) return; 
-        let tipoAcao = row.Tipo || row.tipo || "venda"; 
-        let pLogin = row.promotor_login || row.Promotor || ""; 
-        let dataLinha = row.data_venda || row.Data || ""; 
-        let detalhe = row.Detalhe || row.detalhes || `Venda: ${row.aparelhos_vendidos} | [${row.loja}] ${row.vendedor}`; 
-        let isCancelado = row.status === "Cancelado" || row.Status === "Cancelado" || detalhe.toLowerCase().includes('cancel'); 
-        
-        if (ocultarCancelados && isCancelado) return; 
-        if (apenasCancelados && !isCancelado) return; 
-        
-        let isEstoque = tipoAcao.toLowerCase().includes('estoque') || tipoAcao.toLowerCase().includes('auditoria'); 
-        if (tipoHistoricoAtual === 'estoque' && !isEstoque) return; 
-        if (tipoHistoricoAtual === 'geral' && isEstoque) return; 
-        
-        if (usuarioLogado.id !== "master" && pLogin !== usuarioLogado.id) { 
-            if (!podeGerenciar(usuarioLogado, pLogin)) return; 
-        } 
-        
-        let pObj = bancoUsuarios[pLogin]; 
-        if (supAlvo && supAlvo !== "todos") { 
-            if (pLogin !== supAlvo && (!pObj || pObj.criadoPor !== supAlvo)) return; 
-        } 
-        if (promAlvo && promAlvo !== "todos" && pLogin !== promAlvo) return; 
-        
-        if(dataInicio && dataLinha) { 
-            let dt = new Date(dataInicio + "T00:00:00"); 
-            if(new Date(dataLinha) < dt) return; 
-        } 
-        if(dataFim && dataLinha) { 
-            let dt = new Date(dataFim + "T23:59:59"); 
-            if(new Date(dataLinha) > dt) return; 
-        } 
-        
-        filtrados.push({row: row, originalIndex: index, pLogin: pLogin, isEstoque: isEstoque, detalhe: detalhe, isCancelado: isCancelado, dataLinha: dataLinha}); 
-    }); 
-    
-    let filtrados_total = filtrados.length; 
-    filtrados = filtrados.slice(0, limiteHistorico); 
-    
-    if(filtrados_total === 0) { 
-        div.innerHTML = "<div class='mensagem-vazia'>Nenhuma ação encontrada.</div>"; 
-        return; 
-    } 
-    
-    let html = ""; 
-    filtrados.forEach(item => { 
-        let dataFormatada = "Sem Data"; 
-        if (item.dataLinha) { 
-            let d = new Date(item.dataLinha); 
-            if(!isNaN(d)) dataFormatada = d.toLocaleDateString('pt-BR') + ' às ' + d.toLocaleTimeString('pt-BR').slice(0, 5); 
-        } 
-        
-        let nomePromotor = bancoUsuarios[item.pLogin] ? bancoUsuarios[item.pLogin].nome : item.pLogin; 
-        if (!nomePromotor) nomePromotor = "Usuário Desconhecido"; 
-        
-        let textoDetalheLimpo = item.detalhe.replace(/\[CANCELADO\]/ig, '').trim(); 
-        let opacidade = item.isCancelado ? "opacity: 0.7; filter: grayscale(0.8);" : ""; 
-        let bgCard = item.isCancelado ? "background: var(--bg-fundo);" : "background: var(--bg-card);"; 
-        let bordaCard = item.isCancelado ? "border: 1px dashed #ef4444;" : "border: 1px solid var(--border-color);"; 
-        let estiloTexto = item.isCancelado ? "text-decoration: line-through; color: var(--cor-secundaria);" : "color: var(--cor-texto);"; 
-        let badgeCancelado = item.isCancelado ? `<div style="background: #fee2e2; color: #ef4444; padding: 4px 8px; border-radius: 6px; font-size: 10px; font-weight: bold; margin-bottom: 8px; display: inline-block;">ESTORNADO</div>` : ""; 
-        let icone = item.isEstoque ? '<i data-lucide="package" style="color:#f59e0b;" class="lucide-sm"></i>' : '<i data-lucide="shopping-bag" style="color:#10b981;" class="lucide-sm"></i>'; 
-        if (item.isCancelado) icone = '<i data-lucide="slash" style="color: #ef4444;" class="lucide-sm"></i>'; 
-        
-        let btnAcao = ""; 
-        let adminRole = (usuarioLogado.cargo === "supervisor" || usuarioLogado.cargo === "regional" || usuarioLogado.cargo === "gestor" || usuarioLogado.id === "master"); 
-        
-        if (tipoHistoricoAtual === 'geral' && adminRole) { 
-            if (!item.isCancelado) { 
-                btnAcao = `<button onclick="abrirModalCancelarVenda(${item.originalIndex}, '${item.pLogin}')" style="background: transparent; color: #ef4444; border: 1px solid rgba(239,68,68,0.3); padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: bold; cursor: pointer;"><i data-lucide="x-circle" class="lucide-sm"></i> Cancelar</button>`; 
-            } else { 
-                btnAcao = `<button onclick="executarDesfazerCancelamento(${item.originalIndex})" style="background: var(--bg-item); color: #10b981; border: 1px solid rgba(16,185,129,0.3); padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: bold; cursor: pointer;"><i data-lucide="rotate-ccw" class="lucide-sm"></i> Desfazer</button>`; 
-            } 
-        } 
-        
-        html += `<div style="${opacidade} ${bgCard} ${bordaCard} padding: 16px; border-radius: 12px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 8px;">${badgeCancelado}<div style="display: flex; justify-content: space-between; align-items:center;"><span style="font-size:12px; font-weight:bold; color:var(--cor-secundaria);">${dataFormatada}</span><span style="font-size: 13px; font-weight:bold; color:var(--primary);"><i data-lucide="user" class="lucide-sm"></i> ${nomePromotor}</span></div><div style="font-size:14px; ${estiloTexto} display: flex; align-items: flex-start; justify-content: space-between; gap:8px;"><div style="display: flex; align-items: flex-start; gap: 8px;">${icone} <span>${textoDetalheLimpo}</span></div></div><div style="display: flex; justify-content: flex-end; margin-top: 4px;">${btnAcao}</div></div>`; 
-    }); 
-    
-    div.innerHTML = html; loadIcons(); 
-    if (filtrados_total > limiteHistorico) { 
-        div.innerHTML += `<button class="btn-sistema" style="margin-top: 15px; background: var(--bg-item); color: var(--primary); border: 1px solid var(--primary);" onclick="limiteHistorico += 50; renderizarListaHistorico();">Carregar mais históricos...</button>`; 
-    } 
-}
-
+// ================= DASHBOARDS & GRÁFICOS =================
 function forcarAtualizacaoDashboard() { 
     mostrarToast("Buscando dados atualizados...", "info"); 
     let icone = document.getElementById('icon-refresh-dash'); 
@@ -1022,9 +1154,7 @@ function forcarAtualizacaoDashboard() {
     abrirDashboard(); 
     carregarGraficosShare(); 
 }
-// ==========================================
-// FILTROS EM CASCATA E DASHBOARD (PARTE 3)
-// ==========================================
+
 function atualizarFiltroPromotorDash() { 
     let selSup = document.getElementById('filtro-supervisor-dash'); 
     let supVal = selSup ? selSup.value : "todos"; 
@@ -1056,12 +1186,10 @@ function atualizarFiltroLojaDash() {
     let htmlOp = '<option value="todas">Todas as Lojas</option>';
     let lojasDaBusca = [];
     
-    // 1. TRAVA DE SEGURANÇA: Se for promotor, puxa SÓ as lojas dele
     if (usuarioLogado.cargo === "promotor") {
         lojasDaBusca = usuarioLogado.lojasPermitidas || [];
         if (typeof lojasDaBusca === 'string') { try { lojasDaBusca = JSON.parse(lojasDaBusca); } catch(e) { lojasDaBusca = [lojasDaBusca]; } }
     } else {
-        // 2. Se for gestor/supervisor, respeita os filtros em cascata
         let promotorAtual = selProm ? selProm.value : "todos";
         if (promotorAtual && promotorAtual !== "todos") {
             let userP = bancoUsuarios[promotorAtual];
@@ -1112,19 +1240,35 @@ function abrirDashboard() {
     loadIcons(); 
     document.getElementById("total-vendas-geral").innerText = "..."; 
     
-    supabaseClient.from('vendas').select('*').neq('status', 'Cancelado').then(({ data, error }) => {
+    let dtInicio = document.getElementById("dash-data-inicio") ? document.getElementById("dash-data-inicio").value : null;
+    let dtFim = document.getElementById("dash-data-fim") ? document.getElementById("dash-data-fim").value : null;
+    
+    let query = supabaseClient.from('vendas').select('*').neq('status', 'Cancelado');
+
+    if (dtInicio) { query = query.gte('data_venda', dtInicio + 'T00:00:00'); }
+    if (dtFim) { query = query.lte('data_venda', dtFim + 'T23:59:59'); }
+
+    query.then(({ data, error }) => {
         if (error) throw error;
+        
         let dados = data.map(row => ({
+            promotor_login: row.promotor_login, 
+            loja: row.loja,
             Vendedor: `[${row.loja}] ${row.vendedor}`,
             Aparelhos: row.aparelhos_vendidos,
             Data: row.data_venda
         }));
+        
         dadosAcompanhamentoGlobal = dados; 
         gerarGraficos(dados);
     }).catch(e => { 
-        console.error(e);
+        console.error("Erro ao gerar Dashboard:", e);
         document.getElementById("total-vendas-geral").innerText = "Erro!"; 
-        mostrarBotaoReconexao(); 
+        if (e.message && (e.message.includes('fetch') || e.message.includes('network'))) {
+            mostrarBotaoReconexao(); 
+        } else {
+            mostrarToast("Erro interno na montagem dos gráficos.", "erro");
+        }
     }).finally(() => { 
         let icone = document.getElementById('icon-refresh-dash'); 
         if(icone) icone.style.animation = "none"; 
@@ -1132,46 +1276,157 @@ function abrirDashboard() {
     }); 
 }
 
-function toggleComissao() { let elComissao = document.getElementById("total-comissao-geral"); let iconeOlho = document.getElementById("icone-olho-comissao"); if (elComissao.innerText === "R$ ****") { elComissao.innerText = elComissao.dataset.valor || "R$ 0,00"; iconeOlho.innerHTML = '<i data-lucide="eye-off" style="margin:0;"></i>'; } else { elComissao.innerText = "R$ ****"; iconeOlho.innerHTML = '<i data-lucide="eye" style="margin:0;"></i>'; } loadIcons(); }
-function isCampaignActiveInMonth(startStr, endStr, mesSelecionado) { if (!startStr && !endStr) return true; let partes = mesSelecionado.split('/'); if(partes.length < 2) return true; let m = parseInt(partes[0], 10); let y = parseInt(partes[1], 10); let dtStart = startStr ? new Date(startStr + "T00:00:00") : new Date(2000, 0, 1); let dtEnd = endStr ? new Date(endStr + "T23:59:59") : new Date(2100, 0, 1); let startOfMonth = new Date(y, m - 1, 1); let endOfMonth = new Date(y, m, 0, 23, 59, 59); return dtStart <= endOfMonth && dtEnd >= startOfMonth; }
+function toggleComissao() { let elComissao = document.getElementById("total-comissao-geral"); let iconeOlho = document.getElementById("icone-olho-comissao"); if (elComissao.innerText === "R$ ****") { elComissao.innerText = elComissao.dataset_valor || "R$ 0,00"; iconeOlho.innerHTML = '<i data-lucide="eye-off" style="margin:0;"></i>'; } else { elComissao.innerText = "R$ ****"; iconeOlho.innerHTML = '<i data-lucide="eye" style="margin:0;"></i>'; } loadIcons(); }
+function isCampaignActiveInMonth(startStr, endStr, mesSelecionado) { return true; }
 
 function gerarGraficos(dadosVendas) {
-    if (!dadosVendas) dadosVendas = []; let totalGeral = 0; let vendasPorLoja = {}; let vendasPorModelo = {}; let metricas = {}; let modelosFocoVendidos = {}; let rankingPorLoja = {}; 
+    if (!dadosVendas) dadosVendas = []; 
+    let totalGeral = 0; let vendasPorLoja = {}; let vendasPorModelo = {}; let metricas = {}; let modelosFocoVendidos = {}; let rankingPorLoja = {}; 
     let supervisorFoco = "todos"; let promotorFoco = "todos"; let lojaFoco = "todas";
     
-    if (usuarioLogado.cargo === "promotor") { supervisorFoco = bancoUsuarios[usuarioLogado.id].criadoPor || "todos"; promotorFoco = usuarioLogado.id; } 
-    else { if (usuarioLogado.cargo === "supervisor") supervisorFoco = usuarioLogado.id; else if (usuarioLogado.cargo === "gestor" || usuarioLogado.cargo === "regional" || usuarioLogado.id === "master") supervisorFoco = document.getElementById('filtro-supervisor-dash').value; if (document.getElementById('container-filtro-promotor-dash').style.display !== "none") { promotorFoco = document.getElementById('filtro-promotor-dash').value || "todos"; } }
+    let containerSup = document.getElementById('container-filtro-supervisor-dash');
+    let isSupVisible = containerSup && containerSup.style.display !== "none";
+    
+    let containerProm = document.getElementById('container-filtro-promotor-dash');
+    let isPromVisible = containerProm && containerProm.style.display !== "none";
+
+    if (usuarioLogado.cargo === "promotor") { 
+        supervisorFoco = bancoUsuarios[usuarioLogado.id].criadoPor || "todos"; 
+        promotorFoco = usuarioLogado.id; 
+    } else { 
+        if (usuarioLogado.cargo === "supervisor") {
+            supervisorFoco = usuarioLogado.id; 
+        } else if (isSupVisible && document.getElementById('filtro-supervisor-dash')) { 
+            supervisorFoco = document.getElementById('filtro-supervisor-dash').value; 
+        }
+        if (isPromVisible && document.getElementById('filtro-promotor-dash')) { 
+            promotorFoco = document.getElementById('filtro-promotor-dash').value || "todos"; 
+        } 
+    }
 
     let elLoja = document.getElementById('filtro-loja-dash');
     if (elLoja) lojaFoco = elLoja.value || "todas";
 
     let agrupamento = (supervisorFoco === "todos") ? "supervisor" : "promotor"; let visualizarVendedores = (promotorFoco !== "todos" || lojaFoco !== "todas"); 
     
-    if (agrupamento === "supervisor") { for (let k in bancoUsuarios) { if (bancoUsuarios[k].cargo === "supervisor") { if(podeGerenciar(usuarioLogado, k)) { let nomeSup = bancoUsuarios[k].nome || k; metricas[nomeSup] = { login: k, nome: nomeSup, metaPremium: 0, metaIndividual: 0, realizadoPremium: 0, realizadoGeral: 0, modelosPremiumVendidos: {}, modelosVendidosGeral: {}, comissaoAcumulada: 0 }; } } } }
+    if (agrupamento === "supervisor") { 
+        for (let k in bancoUsuarios) { 
+            if (bancoUsuarios[k].cargo === "supervisor" && podeGerenciar(usuarioLogado, k)) { 
+                let nomeSup = bancoUsuarios[k].nome || k; 
+                metricas[nomeSup] = { login: k, nome: nomeSup, metaPremium: 0, metaIndividual: 0, realizadoPremium: 0, realizadoGeral: 0, modelosPremiumVendidos: {}, modelosVendidosGeral: {}, comissaoAcumulada: 0 }; 
+            } 
+        } 
+    }
 
-    for (let k in bancoUsuarios) { if (bancoUsuarios[k].cargo === "promotor") { let supDoPromotor = bancoUsuarios[k].criadoPor; if (supervisorFoco !== "todos" && supDoPromotor !== supervisorFoco) continue; if (promotorFoco !== "todos" && k !== promotorFoco) continue; if (supervisorFoco === "todos" && !podeGerenciar(usuarioLogado, k)) continue; let metaIndPromotor = bancoUsuarios[k].meta || 0; let taxaSup = taxasCoparticipacao[supDoPromotor] || taxasCoparticipacao["geral"] || 25; let metaPremPromotor = metaIndPromotor * (taxaSup / 100); if (agrupamento === "supervisor") { if (supDoPromotor && bancoUsuarios[supDoPromotor]) { let nomeSup = bancoUsuarios[supDoPromotor].nome || supDoPromotor; if(metricas[nomeSup]) { metricas[nomeSup].metaPremium += metaPremPromotor; metricas[nomeSup].metaIndividual += metaIndPromotor; } } } else { let pNome = bancoUsuarios[k].nome || k; metricas[pNome] = { login: k, nome: pNome, metaPremium: metaPremPromotor, metaIndividual: metaIndPromotor, realizadoPremium: 0, realizadoGeral: 0, modelosPremiumVendidos: {}, modelosVendidosGeral: {}, comissaoAcumulada: 0 }; } } }
+    for (let k in bancoUsuarios) { 
+        if (bancoUsuarios[k].cargo === "promotor") { 
+            let supDoPromotor = bancoUsuarios[k].criadoPor; 
+            if (supervisorFoco !== "todos" && supDoPromotor !== supervisorFoco) continue; 
+            if (promotorFoco !== "todos" && k !== promotorFoco) continue; 
+            if (supervisorFoco === "todos" && !podeGerenciar(usuarioLogado, k)) continue; 
+            
+            let metaIndPromotor = bancoUsuarios[k].meta || 0; 
+            let taxaSup = taxasCoparticipacao[supDoPromotor] || taxasCoparticipacao["geral"] || 25; 
+            let metaPremPromotor = metaIndPromotor * (taxaSup / 100); 
+            
+            if (agrupamento === "supervisor") { 
+                if (supDoPromotor && bancoUsuarios[supDoPromotor]) { 
+                    let nomeSup = bancoUsuarios[supDoPromotor].nome || supDoPromotor; 
+                    if(metricas[nomeSup]) { metricas[nomeSup].metaPremium += metaPremPromotor; metricas[nomeSup].metaIndividual += metaIndPromotor; } 
+                } 
+            } else { 
+                let pNome = bancoUsuarios[k].nome || k; 
+                metricas[pNome] = { login: k, nome: pNome, metaPremium: metaPremPromotor, metaIndividual: metaIndPromotor, realizadoPremium: 0, realizadoGeral: 0, modelosPremiumVendidos: {}, modelosVendidosGeral: {}, comissaoAcumulada: 0 }; 
+            } 
+        } 
+    }
 
     dadosVendas.forEach(row => {
-        let match = (row["Vendedor"] || "").match(/^\[(.*?)\]\s*(.*)$/); let loja = match ? match[1] : "Outras"; let vendNome = match ? match[2] : row["Vendedor"];
+        let loja = row.loja || "Outras"; 
+        let pKey = row.promotor_login; 
         
         if (lojaFoco !== "todas" && loja !== lojaFoco) return;
         
-        let lista = (row["Aparelhos"] || "").split("||").map(x => x.trim()).filter(x => x !== ""); let qtd = lista.length; let pertenceAoEscopo = false; let promotoresImpactados = new Set(); let supervisoresImpactados = new Set();
-        for (let k in bancoUsuarios) { if (bancoUsuarios[k].cargo === "promotor" && bancoUsuarios[k].lojasPermitidas && bancoUsuarios[k].lojasPermitidas.includes(loja)) { if (supervisorFoco === "todos" || bancoUsuarios[k].criadoPor === supervisorFoco) { if (promotorFoco === "todos" || k === promotorFoco) { if (podeGerenciar(usuarioLogado, k)) { pertenceAoEscopo = true; promotoresImpactados.add(k); if(bancoUsuarios[k].criadoPor) supervisoresImpactados.add(bancoUsuarios[k].criadoPor); } } } } }
-        if (!pertenceAoEscopo) return; totalGeral += qtd; if (!vendasPorLoja[loja]) vendasPorLoja[loja] = 0; vendasPorLoja[loja] += qtd;
-        if (visualizarVendedores) { if (!rankingPorLoja[loja]) rankingPorLoja[loja] = {}; let multVend = vendNome.split(" e "); multVend.forEach(vN => { let v = vN.trim(); if (!rankingPorLoja[loja][v]) rankingPorLoja[loja][v] = { qtdGeral: 0, qtdPremium: 0 }; rankingPorLoja[loja][v].qtdGeral += qtd; }); }
+        let pertenceAoEscopo = false;
+        
+        if (promotorFoco === "todos") {
+            if (supervisorFoco === "todos") {
+                if (podeGerenciar(usuarioLogado, pKey)) pertenceAoEscopo = true;
+            } else {
+                if (bancoUsuarios[pKey] && bancoUsuarios[pKey].criadoPor === supervisorFoco) pertenceAoEscopo = true;
+            }
+        } else {
+            if (pKey === promotorFoco) pertenceAoEscopo = true;
+        }
+
+        if (!pertenceAoEscopo) return; 
+
+        let match = (row.Vendedor || "").match(/^\[(.*?)\]\s*(.*)$/); 
+        let vendNome = match ? match[2] : row.Vendedor;
+        
+        let lista = (row.Aparelhos || "").split("||").map(x => x.trim()).filter(x => x !== ""); 
+        let qtd = lista.length; 
+        
+        totalGeral += qtd; 
+        if (!vendasPorLoja[loja]) vendasPorLoja[loja] = 0; 
+        vendasPorLoja[loja] += qtd;
+        
+        if (visualizarVendedores) { 
+            if (!rankingPorLoja[loja]) rankingPorLoja[loja] = {}; 
+            let multVend = vendNome.split(" e "); 
+            multVend.forEach(vN => { 
+                let v = vN.trim(); 
+                if (!rankingPorLoja[loja][v]) rankingPorLoja[loja][v] = { qtdGeral: 0, qtdPremium: 0 }; 
+                rankingPorLoja[loja][v].qtdGeral += qtd; 
+            }); 
+        }
 
         lista.forEach(ap => { 
-            let chaveKey = extrairChaveAparelho(ap); let modeloFormatado = (mapaEmojis[chaveKey] ? mapaEmojis[chaveKey] + " " : "") + chaveKey.toUpperCase();
-            if (!vendasPorModelo[modeloFormatado]) vendasPorModelo[modeloFormatado] = 0; vendasPorModelo[modeloFormatado] += 1; 
+            let chaveKey = extrairChaveAparelho(ap); 
+            let modeloFormatado = (mapaEmojis[chaveKey] ? mapaEmojis[chaveKey] + " " : "") + chaveKey.toUpperCase();
+            
+            if (!vendasPorModelo[modeloFormatado]) vendasPorModelo[modeloFormatado] = 0; 
+            vendasPorModelo[modeloFormatado] += 1; 
+            
             let checkPrem = ehPremium(ap, supervisorFoco !== "todos" ? supervisorFoco : "geral");
-            if (visualizarVendedores && checkPrem) { vendNome.split(" e ").forEach(vN => { rankingPorLoja[loja][vN.trim()].qtdPremium += 1; }); }
+            
+            if (visualizarVendedores && checkPrem) { 
+                vendNome.split(" e ").forEach(vN => { rankingPorLoja[loja][vN.trim()].qtdPremium += 1; }); 
+            }
 
-            if (agrupamento === "supervisor") { supervisoresImpactados.forEach(supKey => { let userSup = bancoUsuarios[supKey]; let nomeSup = userSup ? (userSup.nome || supKey) : supKey; if (metricas[nomeSup]) { metricas[nomeSup].realizadoGeral += 1; metricas[nomeSup].modelosVendidosGeral[chaveKey] = (metricas[nomeSup].modelosVendidosGeral[chaveKey] || 0) + 1; if (checkPrem) { metricas[nomeSup].realizadoPremium += 1; modelosFocoVendidos[modeloFormatado] = (modelosFocoVendidos[modeloFormatado] || 0) + 1; metricas[nomeSup].modelosPremiumVendidos[chaveKey] = (metricas[nomeSup].modelosPremiumVendidos[chaveKey] || 0) + 1; } } }); } else { promotoresImpactados.forEach(pKey => { let userP = bancoUsuarios[pKey]; let pNome = userP ? (userP.nome || pKey) : pKey; let supKey = userP ? userP.criadoPor : "geral"; if (metricas[pNome]) { metricas[pNome].realizadoGeral += 1; metricas[pNome].modelosVendidosGeral[chaveKey] = (metricas[pNome].modelosVendidosGeral[chaveKey] || 0) + 1; if (checkPrem) { metricas[pNome].realizadoPremium += 1; modelosFocoVendidos[modeloFormatado] = (modelosFocoVendidos[modeloFormatado] || 0) + 1; metricas[pNome].modelosPremiumVendidos[chaveKey] = (metricas[pNome].modelosPremiumVendidos[chaveKey] || 0) + 1; } } }); }
+            if (agrupamento === "supervisor") { 
+                let supKey = bancoUsuarios[pKey] ? bancoUsuarios[pKey].criadoPor : null;
+                if (supKey) {
+                    let userSup = bancoUsuarios[supKey]; 
+                    let nomeSup = userSup ? (userSup.nome || supKey) : supKey; 
+                    if (metricas[nomeSup]) { 
+                        metricas[nomeSup].realizadoGeral += 1; 
+                        metricas[nomeSup].modelosVendidosGeral[chaveKey] = (metricas[nomeSup].modelosVendidosGeral[chaveKey] || 0) + 1; 
+                        if (checkPrem) { 
+                            metricas[nomeSup].realizadoPremium += 1; 
+                            modelosFocoVendidos[modeloFormatado] = (modelosFocoVendidos[modeloFormatado] || 0) + 1; 
+                            metricas[nomeSup].modelosPremiumVendidos[chaveKey] = (metricas[nomeSup].modelosPremiumVendidos[chaveKey] || 0) + 1; 
+                        } 
+                    } 
+                }
+            } else { 
+                let userP = bancoUsuarios[pKey]; 
+                let pNome = userP ? (userP.nome || pKey) : pKey; 
+                
+                if (metricas[pNome]) { 
+                    metricas[pNome].realizadoGeral += 1; 
+                    metricas[pNome].modelosVendidosGeral[chaveKey] = (metricas[pNome].modelosVendidosGeral[chaveKey] || 0) + 1; 
+                    if (checkPrem) { 
+                        metricas[pNome].realizadoPremium += 1; 
+                        modelosFocoVendidos[modeloFormatado] = (modelosFocoVendidos[modeloFormatado] || 0) + 1; 
+                        metricas[pNome].modelosPremiumVendidos[chaveKey] = (metricas[pNome].modelosPremiumVendidos[chaveKey] || 0) + 1; 
+                    } 
+                } 
+            }
         });
     });
 
-    let mesFiltro = document.getElementById("seletor-mes-dash").value;
+    let mesFiltro = ""; 
     Object.values(metricas).forEach(m => {
         let comissaoUser = 0; let supkey = m.login; 
         if (bancoUsuarios[m.login] && bancoUsuarios[m.login].cargo === "promotor") { supkey = bancoUsuarios[m.login].criadoPor; }
@@ -1215,10 +1470,18 @@ function gerarGraficos(dadosVendas) {
         m.comissaoAcumulada = comissaoUser;
     });
 
-    let dataReferencia = new Date(); let diasParaMedia = 1; if (mesFiltro !== "") { let partes = mesFiltro.split('/'); let ms = parseInt(partes[0], 10); let yr = parseInt(partes[1], 10); if (dataReferencia.getMonth() + 1 === ms && dataReferencia.getFullYear() === yr) { diasParaMedia = dataReferencia.getDate(); } else { diasParaMedia = new Date(yr, ms, 0).getDate(); } } else { diasParaMedia = dataReferencia.getDate(); } if (diasParaMedia < 1) diasParaMedia = 1; let mediaDiaria = totalGeral > 0 ? (totalGeral / diasParaMedia).toFixed(1) : 0;
+    let diasParaMedia = new Date().getDate(); if (diasParaMedia < 1) diasParaMedia = 1; 
+    let mediaDiaria = totalGeral > 0 ? (totalGeral / diasParaMedia).toFixed(1) : 0;
     
-    document.getElementById("total-vendas-geral").innerText = `${totalGeral} un`; document.getElementById("media-diaria-geral").innerText = `${mediaDiaria} un`;
-    let comissaoTotalGeral = Object.values(metricas).reduce((acc, m) => acc + (m.comissaoAcumulada || 0), 0); let valorFormatado = `R$ ${comissaoTotalGeral.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`; let elComissao = document.getElementById("total-comissao-geral"); elComissao.dataset.valor = valorFormatado; elComissao.innerText = "R$ ****"; document.getElementById("icone-olho-comissao").innerHTML = '<i data-lucide="eye" style="margin:0;"></i>'; loadIcons();
+    document.getElementById("total-vendas-geral").innerText = `${totalGeral} un`; 
+    document.getElementById("media-diaria-geral").innerText = `${mediaDiaria} un`;
+    let comissaoTotalGeral = Object.values(metricas).reduce((acc, m) => acc + (m.comissaoAcumulada || 0), 0); 
+    let valorFormatado = `R$ ${comissaoTotalGeral.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`; 
+    let elComissao = document.getElementById("total-comissao-geral"); 
+    elComissao.dataset.valor = valorFormatado; 
+    elComissao.innerText = "R$ ****"; 
+    document.getElementById("icone-olho-comissao").innerHTML = '<i data-lucide="eye" style="margin:0;"></i>'; 
+    loadIcons();
 
     let supAlvoParaFoco = (supervisorFoco !== "todos") ? supervisorFoco : "geral"; let pSup = aparelhosPremium[supAlvoParaFoco]; if (!pSup || Object.keys(pSup).length === 0) pSup = aparelhosPremium["geral"] || {}; let listaFocoAtuais = Object.keys(pSup).filter(k => pSup[k]).map(k => `<span style="display:inline-block; background:var(--bg-item); color:var(--cor-texto); padding:4px 8px; border-radius:6px; margin:2px; border: 1px solid var(--border-color); font-weight:bold;">${mapaEmojis[k] || ''} ${k.toUpperCase()}</span>`); document.getElementById("lista-foco-ativo-dash").innerHTML = listaFocoAtuais.length > 0 ? listaFocoAtuais.join("") : "<span style='color:var(--cor-secundaria); font-style:italic;'>Nenhum aparelho configurado como Foco.</span>";
 
@@ -1260,652 +1523,61 @@ function gerarGraficos(dadosVendas) {
             if(document.getElementById('tela-dashboard').classList.contains('ativa')) {
                 let isTop1 = false;
                 if (!visualizarVendedores && promOrd.length > 0) { if (promOrd[0] === usuarioLogado.nome || promOrd[0] === usuarioLogado.id) isTop1 = true; }
-                if (isTop1 && !window.confettiDisparado) { confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 }, colors: ['#0086ff', '#10b981', '#f59e0b', '#ffd700'] }); window.confettiDisparado = true; mostrarToast("🏆 Parabéns! Você está em 1º Lugar no ranking!", "sucesso"); }
+                if (isTop1 && !window.confettiDisparado) { typeof confetti === "function" && confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 }, colors: ['#0086ff', '#10b981', '#f59e0b', '#ffd700'] }); window.confettiDisparado = true; mostrarToast("🏆 Parabéns! Você está em 1º Lugar no ranking!", "sucesso"); }
             }
         }, 500);
 
     } catch(errG) { console.error("Erro interno nos gráficos:", errG); }
 }
 
-// ================= ADMIN & CONFIGURAÇÕES =================
-function renderizarSelectRegioes() {
-    let regioesUnicas = new Set(); for (let k in bancoUsuarios) { if (bancoUsuarios[k].regiao) regioesUnicas.add(bancoUsuarios[k].regiao.toUpperCase()); } let sel = document.getElementById('admin-gs-regiao-select'); if (!sel) return; let html = '<option value="">Selecione a Região...</option>'; let regioesArray = Array.from(regioesUnicas).sort(); regioesArray.forEach(r => { html += `<option value="${r}">${r}</option>`; }); html += '<option value="NOVA">➕ Criar Nova Região</option>'; sel.innerHTML = html;
-}
-function verificarNovaRegiao(val) { let inp = document.getElementById('admin-gs-regiao-input'); if(val === 'NOVA') { inp.style.display = 'block'; } else { inp.style.display = 'none'; inp.value = ''; } }
-
-function abrirAdmin() { 
-    mudarTela('tela-admin'); let selSupFoco = document.getElementById('seletor-foco-sup');
-
-    if (usuarioLogado.cargo === "gestor" || usuarioLogado.cargo === "regional" || usuarioLogado.id === "master") {
-        if(usuarioLogado.cargo === "gestor" || usuarioLogado.id === "master") { document.getElementById('bloco-criar-gestor').style.display = "block"; renderizarSelectRegioes(); } else { document.getElementById('bloco-criar-gestor').style.display = "none"; }
-        document.getElementById('bloco-admin-foco').style.display = "block"; selSupFoco.innerHTML = '<option value="geral">Geral (Padrão da Empresa)</option>'; 
-        for(let k in bancoUsuarios) { if (bancoUsuarios[k].cargo === "supervisor" && podeGerenciar(usuarioLogado, k)) { selSupFoco.innerHTML += `<option value="${k}">Equipe: ${bancoUsuarios[k].nome || k}</option>`; } } 
-    } 
-    else if (usuarioLogado.cargo === "supervisor") {
-        document.getElementById('bloco-criar-gestor').style.display = "none"; document.getElementById('bloco-admin-foco').style.display = "block"; 
-        selSupFoco.innerHTML = `<option value="${usuarioLogado.id}">Minha Equipe (${usuarioLogado.nome})</option>`; selSupFoco.value = usuarioLogado.id; 
-    } 
-    else { document.getElementById('bloco-admin-foco').style.display = "none"; document.getElementById('bloco-criar-gestor').style.display = "none"; }
-    
-    if (usuarioLogado.cargo === "regional") { document.getElementById('container-admin-regiao').style.display = 'none'; }
-    
-    renderizarAdminUsuarios(); renderizarInputsFoco(); renderizarAdminAparelhos(); 
-}
-
-function renderizarAdminUsuarios() {
-    const div = document.getElementById('lista-admin-supervisores'); let htmlContent = ""; const filtroCargo = document.getElementById('filtro-cargo-admin') ? document.getElementById('filtro-cargo-admin').value : 'todos'; const busca = document.getElementById('busca-admin') ? document.getElementById('busca-admin').value.toLowerCase() : '';
-    for(let l in bancoUsuarios) { 
-        let u = bancoUsuarios[l]; 
-        if (u.cargo === "promotor" && usuarioLogado.id !== "master") continue; if (!podeGerenciar(usuarioLogado, l) && l !== usuarioLogado.id) continue;
-        if (filtroCargo !== 'todos') { if (filtroCargo === 'regional' && u.cargo !== 'regional' && u.cargo !== 'gestor') continue; if (filtroCargo !== 'regional' && u.cargo !== filtroCargo) continue; }
-        const nomeUpper = (u.nome || l).toLowerCase(); if (busca && !nomeUpper.includes(busca) && !l.includes(busca)) continue;
-
-        let labelCargo = l === "master" ? "👑 Master" : (u.cargo === "gestor" ? "👔 Gestor" : (u.cargo === "regional" ? "🌎 Regional" : (u.cargo === "supervisor" ? "📍 Supervisor" : "👤 Promotor"))); let subLabel = u.regiao ? ` - Região: ${u.regiao}` : "";
-        let btnGerenciar = (u.cargo === "supervisor") ? `<button class="btn-editar" style="background: var(--primary-gradiente); color:white; border:none; padding: 12px; border-radius: 12px; width: 100%; margin-top: 12px; font-weight:bold;" onclick="abrirPainelEquipe('${l}')"><i data-lucide="settings" class="lucide-sm"></i> Gerenciar Equipe de ${u.nome || l}</button>` : (usuarioLogado.id === "master" && u.cargo === "promotor") ? `<button class="btn-editar" style="background: var(--primary-gradiente); color:white; border:none; padding: 12px; border-radius: 12px; width: 100%; margin-top: 12px;" onclick="adminAbrirModalLojas('${l}')"><i data-lucide="settings" class="lucide-sm"></i> Gerenciar Lojas</button>` : ''; 
-        let btnRegiao = (usuarioLogado.cargo === "gestor" || usuarioLogado.id === "master") ? `<button class="btn-editar" style="background-color: #8b5cf6; color:white; border:none;" onclick="adminAbrirModalRegiao('${l}')"><i data-lucide="globe"></i> Região</button>` : ""; 
-        let btnSenha = `<button class="btn-editar" style="background-color: #f59e0b; color: white; border:none;" onclick="adminAbrirModalSenha('${l}')"><i data-lucide="key"></i> Senha</button>`; let btnExcluir = (usuarioLogado.id === "master" && l !== "master") ? `<button class="btn-excluir" onclick="adminRemoverUsuario('${l}')"><i data-lucide="trash-2"></i></button>` : ""; 
-        htmlContent += `<div class="linha-admin" style="flex-direction: column; align-items: stretch; padding: 16px; background: var(--bg-card); margin-bottom: 12px; border-radius: 16px; border: 1px solid var(--border-color);"><div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed var(--border-color); padding-bottom: 10px; margin-bottom: 10px;"><div style="text-align: left;"><strong style="font-size: 16px;">${u.nome || l} <span style="font-size: 11px; color: var(--cor-secundaria);">(@${l})</span></strong><span style="font-size: 12px; font-weight: bold; color: var(--primary);">${labelCargo}${subLabel}</span></div><div style="display: flex; gap: 8px;">${btnRegiao} ${btnSenha} ${btnExcluir}</div></div>${btnGerenciar}</div>`; 
-    } div.innerHTML = htmlContent || "<p style='color:var(--cor-secundaria); font-size:13px;'>Nenhum usuário encontrado.</p>"; loadIcons();
-}
-
-function filtrarListaModal(classe, termo) { termo = termo.toLowerCase(); let itens = document.querySelectorAll('.' + classe); itens.forEach(item => { if(item.innerText.toLowerCase().includes(termo)) { item.style.display = "block"; } else { item.style.display = "none"; } }); }
-
-function abrirPainelEquipe(login) {
-    supervisorGerenciadoAtual = login;
-    let supNome = bancoUsuarios[login].nome || login;
-    let titulo = document.getElementById('titulo-modal-equipe');
-    if (titulo) titulo.innerHTML = `<i data-lucide="users"></i> Equipe de ${supNome}`;
-    
-    renderizarModalEquipe();
-    document.getElementById('modal-gerenciar-equipe').classList.add('ativo');
-    switchTab('equipe-tab-promotores', 'equipe-tab');
-    loadIcons();
-}
-
-function fecharModalEquipe() {
-    document.getElementById('modal-gerenciar-equipe').classList.remove('ativo');
-    supervisorGerenciadoAtual = null;
-}
-
-function getLojasDaRegiao(supLogin) {
-    let lojas = [];
-    for (let l in lojasConfig) {
-        if (lojasConfig[l].supervisor === supLogin) {
-            lojas.push(l);
-        } else if (!lojasConfig[l].supervisor) {
-            let promotoresDoSup = Object.keys(bancoUsuarios).filter(k => bancoUsuarios[k].cargo === "promotor" && bancoUsuarios[k].criadoPor === supLogin);
-            let pertence = promotoresDoSup.some(p => bancoUsuarios[p].lojasPermitidas && bancoUsuarios[p].lojasPermitidas.includes(l));
-            if (pertence) {
-                lojas.push(l);
-                lojasConfig[l].supervisor = supLogin;
-            }
-        }
-    }
-    return lojas.sort((a,b) => a.localeCompare(b, undefined, {numeric: true, sensitivity: 'base'}));
-}
-
-function renderizarModalEquipe() {
-    if(!supervisorGerenciadoAtual) return;
-    let divPromotores = document.getElementById('lista-modal-promotores'); let divLojas = document.getElementById('lista-modal-lojas'); let selLoja = document.getElementById('modal-select-loja'); let lojasDaRegiao = getLojasDaRegiao(supervisorGerenciadoAtual); 
-    
-    let promotoresArray = [];
-    for(let k in bancoUsuarios) { if(bancoUsuarios[k].cargo === "promotor" && (bancoUsuarios[k].criadoPor === supervisorGerenciadoAtual || usuarioLogado.id === "master")) { promotoresArray.push({ login: k, nome: bancoUsuarios[k].nome || k, obj: bancoUsuarios[k] }); } }
-    promotoresArray.sort((a, b) => a.nome.localeCompare(b.nome));
-
-    let htmlPromotores = "";
-    promotoresArray.forEach(p => {
-        let u = p.obj; let k = p.login;
-        htmlPromotores += `<div class="item-modal-busca-promotor" style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 15px; margin-bottom: 10px; text-align: left;"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;"><strong style="font-size:15px;"><i data-lucide="user" class="lucide-sm"></i> ${u.nome || k} (@${k})</strong><div style="display:flex; gap:8px;"><button class="btn-editar" style="background:#f59e0b; color:#fff;" onclick="adminAbrirModalSenha('${k}')"><i data-lucide="key" class="lucide-sm"></i></button><button class="btn-editar" style="background:var(--primary); color:white;" onclick="adminAbrirModalNome('${k}')"><i data-lucide="edit-3" class="lucide-sm"></i></button><button class="btn-editar" style="background:#8b5cf6; color:white;" onclick="adminAbrirModalPermissoes('${k}')"><i data-lucide="shield" class="lucide-sm"></i></button><button class="btn-excluir" onclick="adminRemoverUsuarioModalEquipe('${k}')"><i data-lucide="trash-2" class="lucide-sm"></i></button></div></div><div style="font-size:13px; color:var(--cor-secundaria); display:flex; justify-content:space-between;"><span>Meta Padrão: <strong>${u.meta || 0}</strong> <button class="btn-editar-meta" onclick="adminAbrirModalMeta('${k}')"><i data-lucide="target" class="lucide-sm"></i></button></span><span>Lojas: <strong>${u.lojasPermitidas ? u.lojasPermitidas.length : 0}</strong> <button class="btn-editar" onclick="adminAbrirModalLojas('${k}')"><i data-lucide="store" class="lucide-sm"></i></button></span></div></div>`;
-    });
-    divPromotores.innerHTML = htmlPromotores || "<p style='font-size:13px; color:var(--cor-secundaria);'>Nenum promotor cadastrado.</p>";
-
-    let htmlLojas = ""; let htmlSelLoja = "";
-    lojasDaRegiao.forEach(loja => {
-        let objL = lojasConfig[loja] || { vendedores: [], capa: 0 }; htmlSelLoja += `<option value="${loja}">${loja}</option>`;
-        let vends = (objL.vendedores || []).map(v => `<span style="background:var(--bg-item); color:var(--primary); padding:4px 8px; border-radius:6px; font-size:11px; margin-right:6px; border:1px solid var(--primary); display:inline-flex; align-items:center; gap:4px; margin-bottom:4px;">${v} <i data-lucide="x" class="lucide-sm" style="cursor:pointer;" onclick="adminRemoverVendedor('${loja}', '${v}')"></i></span>`).join("");
-        htmlLojas += `<div class="item-modal-busca-loja" style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 15px; margin-bottom: 10px; text-align: left;"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;"><strong style="font-size:15px;"><i data-lucide="store" class="lucide-sm"></i> ${loja}</strong><div style="display:flex; gap:8px;"><button class="btn-editar-meta" onclick="adminAbrirModalCapa('${loja}')"><i data-lucide="layers" class="lucide-sm"></i> Capa: ${objL.capa || 0}</button><button class="btn-excluir" onclick="adminRemoverLoja('${loja}')"><i data-lucide="trash-2" class="lucide-sm"></i></button></div></div><div style="font-size:13px; color:var(--cor-secundaria); margin-top:5px; line-height:1.6;">Vendedores: <br>${vends || 'Nenhum'}</div></div>`;
-    });
-    divLojas.innerHTML = htmlLojas || "<p style='font-size:13px; color:var(--cor-secundaria);'>Nenhuma loja na região.</p>"; selLoja.innerHTML = htmlSelLoja;
-    
-    let divCheckboxLojas = document.getElementById('modal-promotor-lojas');
-    let htmlCheckLojas = lojasDaRegiao.map(l => `<label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" class="check-nova-loja" value="${l}"> ${l}</label>`).join("");
-    divCheckboxLojas.innerHTML = htmlCheckLojas || "<i style='font-size:11px;'>Crie lojas primeiro.</i>"; loadIcons();
-}
-
-function adminAddPromotorEquipe() {
-    let login = document.getElementById('modal-promotor-login').value.trim().toLowerCase();
-    let nome = document.getElementById('modal-promotor-nome').value.trim();
-    let senha = document.getElementById('modal-promotor-senha').value.trim();
-    let meta = parseInt(document.getElementById('modal-promotor-meta').value) || 0;
-    if(!login || !nome || !senha) return mostrarToast("Preencha login, nome e senha obrigatórios", "alerta");
-    if(bancoUsuarios[login]) return mostrarToast("Este login já existe no sistema", "erro");
-    let lojasSelecionadas = Array.from(document.querySelectorAll('.check-nova-loja:checked')).map(cb => cb.value);
-    bancoUsuarios[login] = {
-        nome: nome, senha: senha, cargo: "promotor", meta: meta, criadoPor: supervisorGerenciadoAtual, lojasPermitidas: lojasSelecionadas,
-        permissoes: { vendas: document.getElementById('perm-vendas').checked, acomp: document.getElementById('perm-acomp').checked, estoque_ver: document.getElementById('perm-est-ver').checked, estoque_editar: document.getElementById('perm-est-edit').checked }
-    };
-    document.getElementById('modal-promotor-login').value = ""; document.getElementById('modal-promotor-nome').value = ""; document.getElementById('modal-promotor-senha').value = ""; document.getElementById('modal-promotor-meta').value = "";
-    renderizarModalEquipe(); mostrarToast("Promotor criado! Lembre-se de clicar em SALVAR no topo.", "sucesso");
-}
-
-function adminAddGestorSup() {
-    let login = document.getElementById('admin-gs-login').value.trim().toLowerCase();
-    let nome = document.getElementById('admin-gs-nome').value.trim();
-    let senha = document.getElementById('admin-gs-senha').value.trim();
-    let cargo = document.getElementById('admin-gs-cargo').value;
-    let regiaoSel = document.getElementById('admin-gs-regiao-select').value;
-    let regiaoNova = document.getElementById('admin-gs-regiao-input').value.trim().toUpperCase();
-    let regiaoFinal = regiaoSel === 'NOVA' ? regiaoNova : regiaoSel;
-    if(!login || !nome || !senha) return mostrarToast("Preencha login, nome e senha!", "alerta");
-    if(bancoUsuarios[login]) return mostrarToast("Este login já existe!", "erro");
-    if(cargo !== 'gestor' && !regiaoFinal) return mostrarToast("Defina a região da equipe!", "alerta");
-    bancoUsuarios[login] = { nome: nome, senha: senha, cargo: cargo, regiao: cargo === 'gestor' ? 'GLOBAL' : regiaoFinal, criadoPor: usuarioLogado.id, meta: 0 };
-    document.getElementById('admin-gs-login').value = ""; document.getElementById('admin-gs-nome').value = ""; document.getElementById('admin-gs-senha').value = ""; if(document.getElementById('admin-gs-regiao-input')) document.getElementById('admin-gs-regiao-input').value = "";
-    renderizarAdminUsuarios(); mostrarToast(cargo.toUpperCase() + " criado com sucesso! Clique em SALVAR no topo.", "sucesso");
-}
-
-function adminAddLojaEquipe() { let nome = document.getElementById('modal-loja-nome').value.trim(); let capa = parseInt(document.getElementById('modal-loja-capa').value) || 0; if(!nome) return mostrarToast("Preencha o nome da loja", "alerta"); if(lojasConfig[nome]) return mostrarToast("Loja já existe", "erro"); lojasConfig[nome] = { supervisor: supervisorGerenciadoAtual, capa: capa, vendedores: [] }; document.getElementById('modal-loja-nome').value = ""; document.getElementById('modal-loja-capa').value = ""; renderizarModalEquipe(); mostrarToast("Loja criada. Clique em 'Salvar'.", "info"); }
-function adminAddVendedorEquipe() { let loja = document.getElementById('modal-select-loja').value; let nomes = document.getElementById('modal-vendedor-nome').value.trim(); if(!loja) return mostrarToast("Selecione uma loja", "alerta"); if(!nomes) return mostrarToast("Preencha o nome do vendedor", "alerta"); if(!lojasConfig[loja]) lojasConfig[loja] = { supervisor: supervisorGerenciadoAtual, capa: 0, vendedores: [] }; if(!lojasConfig[loja].vendedores) lojasConfig[loja].vendedores = []; let arrayNomes = nomes.split(',').map(n => n.trim()).filter(n => n !== ""); arrayNomes.forEach(n => { if(!lojasConfig[loja].vendedores.includes(n)) lojasConfig[loja].vendedores.push(n); }); document.getElementById('modal-vendedor-nome').value = ""; renderizarModalEquipe(); mostrarToast("Vendedor vinculado. Clique em 'Salvar'.", "info"); }
-function adminRemoverUsuarioModalEquipe(login) { if(confirm("Excluir promotor?")) { delete bancoUsuarios[login]; renderizarModalEquipe(); mostrarToast("Promotor removido.", "info"); } }
-function adminRemoverLoja(loja) { if(confirm("Excluir loja?")) { delete lojasConfig[loja]; for(let k in bancoUsuarios) { if(bancoUsuarios[k].lojasPermitidas) bancoUsuarios[k].lojasPermitidas = bancoUsuarios[k].lojasPermitidas.filter(l => l !== loja); } renderizarModalEquipe(); mostrarToast("Loja removida.", "info"); } }
-function adminRemoverVendedor(loja, vend) { lojasConfig[loja].vendedores = lojasConfig[loja].vendedores.filter(v => v !== vend); renderizarModalEquipe(); mostrarToast("Vendedor removido.", "info"); }
-function adminRemoverUsuario(login) { if(confirm(`Excluir usuário ${login}?`)) { delete bancoUsuarios[login]; renderizarAdminUsuarios(); mostrarToast("Usuário excluído. Clique em 'Salvar'.", "info"); } }
-
-function renderizarAdminAparelhos() {
-    let div = document.getElementById('lista-admin-aparelhos'); let html = "";
-    for(let ap in mapaEmojis) { html += `<div style="display:flex; justify-content:space-between; align-items:center; padding:12px; border-bottom:1px solid var(--border-color); font-size:15px; color:var(--cor-texto);"><span><span style="font-size: 20px; margin-right: 8px;">${mapaEmojis[ap]}</span> ${ap.toUpperCase()}</span><button class="btn-excluir" onclick="removerAparelhoGlobal('${ap}')"><i data-lucide="trash-2" class="lucide-sm"></i> Excluir</button></div>`; }
-    div.innerHTML = html || "<p style='color:var(--cor-secundaria); font-size:13px;'>Nenhum aparelho cadastrado.</p>"; loadIcons();
-}
-
-function removerAparelhoGlobal(ap) { delete mapaEmojis[ap]; renderizarAdminAparelhos(); mostrarToast("Aparelho excluído. Clique em 'Salvar'.", "info"); }
-
-function adminAddAparelho() {
-    let n = document.getElementById('admin-aparelho-nome').value.trim().toLowerCase(); let e = document.getElementById('admin-aparelho-emoji').value.trim();
-    if(!n || !e) return mostrarToast("Preencha Nome e Emoji", "alerta"); if(mapaEmojis[n]) return mostrarToast("Aparelho já existe", "erro");
-    mapaEmojis[n] = e; document.getElementById('admin-aparelho-nome').value = ""; document.getElementById('admin-aparelho-emoji').value = ""; renderizarAdminAparelhos(); mostrarToast("Aparelho adicionado. Clique em 'Salvar'.", "info");
-}
-
-function renderizarInputsFoco() {
-    const container = document.getElementById('admin-foco-container'); const selSup = document.getElementById('seletor-foco-sup'); 
-    if (!container || !selSup) return;
-    let supId = selSup.value; let premiumSup = aparelhosPremium[supId] || aparelhosPremium["geral"] || {}; let taxaSup = taxasCoparticipacao[supId] || taxasCoparticipacao["geral"] || 25; let vComissaoSup = valoresComissao[supId] || valoresComissao["geral"] || {}; 
-    let grupos = vComissaoSup.grupos || []; let aparelhosCfg = vComissaoSup.aparelhos || {}; let campanhasAtivas = vComissaoSup.campanhasPersonalizadas || [];
-    
-    let marcasConcorrentes = vComissaoSup.marcas_concorrentes || ["Samsung", "Motorola", "Outros"];
-
-    document.getElementById('input-taxa-copart').value = taxaSup;
-
-    let htmlGrupos = '<div style="background: var(--bg-item); padding: 20px; border-radius: 16px; border: 1px solid var(--border-color); margin-top: 20px; text-align: left;"><div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;"><span style="font-size: 15px; font-weight: bold; color: #8b5cf6;"><i data-lucide="layers" class="lucide-sm"></i> Categorias de Comissionamento</span><button class="btn-acao btn-enviar" style="padding: 8px 14px; font-size: 12px; width: auto; background: #8b5cf6;" onclick="adminAddGrupo()"><i data-lucide="plus"></i> Nova Categoria</button></div>';
-    if(grupos.length === 0) htmlGrupos += '<span style="font-size:12px; color:var(--cor-secundaria);">Crie categorias (ex: Linha Intermediária, Linha Premium) para somar o volume de vendas.</span>';
-    grupos.forEach((g, gIdx) => {
-        htmlGrupos += `<div class="bloco-grupo" data-id="${g.id}" style="background:var(--bg-container); padding:15px; border-radius:12px; border: 1px solid var(--border-color); margin-bottom:12px;"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;"><input type="text" class="grupo-nome" value="${g.nome}" style="font-weight:bold; color:var(--primary); width:180px; margin:0; padding:8px; border-color:var(--primary);" onchange="adminEditGrupoNome('${g.id}', this.value)"><div style="display:flex; gap:8px;"><button class="btn-editar" style="font-size:11px; padding:6px 10px;" onclick="adminAddNivelGrupo('${g.id}')">+ Adicionar Nível de Meta</button><button class="btn-excluir" style="padding:6px 10px;" onclick="adminRemoverGrupo('${g.id}')"><i data-lucide="trash-2" class="lucide-sm" style="margin:0;"></i></button></div></div>`;
-        g.niveis.forEach((nv, nIdx) => { htmlGrupos += `<div style="display:flex; align-items:center; gap:10px; margin-bottom:8px; font-size:13px; background:var(--bg-item); padding:8px 12px; border-radius:8px; border: 1px dashed var(--border-color);"><span>Nível ${nIdx + 1} - Atingindo</span> <input type="number" value="${nv.meta}" style="width:70px; margin:0; padding:6px; font-weight:bold;" onchange="adminEditGrupoNivel('${g.id}', ${nIdx}, 'meta', this.value)"> <span>unidades.</span><button class="btn-excluir" style="padding:4px 8px; margin-left:auto; font-size:10px;" onclick="adminRemoverNivelGrupo('${g.id}', ${nIdx})"><i data-lucide="x" style="margin:0;"></i></button></div>`; });
-        htmlGrupos += `</div>`;
-    });
-    htmlGrupos += '</div>';
-
-    let htmlCampanhas = '<div style="background: var(--bg-item); padding: 20px; border-radius: 16px; border: 1px solid var(--border-color); margin-top: 20px; text-align: left;"><div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;"><span style="font-size: 14px; font-weight: bold; color: #f59e0b;"><i data-lucide="gift" class="lucide-sm"></i> Campanhas Extra</span><button class="btn-acao btn-enviar" style="background-color: #f59e0b; padding: 8px 14px; font-size: 12px; width: auto;" onclick="adicionarLinhaCampanha()"><i data-lucide="plus"></i> Nova Regra</button></div><div id="container-linhas-campanhas" style="display: flex; flex-direction: column; gap: 12px;">';
-    if (campanhasAtivas.length === 0) { htmlCampanhas += '<span style="font-size: 13px; color: var(--cor-secundaria); font-style: italic;">Nenhuma campanha ativa.</span>'; }
-    campanhasAtivas.forEach((camp, index) => {
-        let optionsAparelhos = '<option value="todos">Qualquer Aparelho (Bate Foco)</option>'; for (let ap in mapaEmojis) { let sel = camp.aparelho === ap ? "selected" : ""; optionsAparelhos += `<option value="${ap}" ${sel}>${mapaEmojis[ap]} ${ap.toUpperCase()}</option>`; }
-        let optionsPromotores = '<option value="todos">Toda a Equipe</option>'; for (let pk in bancoUsuarios) { if (bancoUsuarios[pk].cargo === "promotor" && (supId === 'geral' || bancoUsuarios[pk].criadoPor === supId)) { let selP = (camp.promotorAlvo === pk) ? "selected" : ""; optionsPromotores += `<option value="${pk}" ${selP}>👤 ${bancoUsuarios[pk].nome || pk}</option>`; } }
-        htmlCampanhas += `<div class="linha-campanha-dinamica" style="background: var(--bg-container); padding: 15px; border-radius: 12px; border: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 10px;"><div style="display: flex; gap: 10px; flex-wrap: wrap;"><select class="camp-aparelho" style="margin-bottom:0; padding:10px; flex:1;" onchange="atualizarListaPremiumGlobal()">${optionsAparelhos}</select><select class="camp-promotor" style="margin-bottom:0; padding:10px; flex:1;" onchange="atualizarListaPremiumGlobal()">${optionsPromotores}</select><button class="btn-excluir" style="padding: 10px;" onclick="removerLinhaCampanha(${index})"><i data-lucide="trash-2" style="margin:0;"></i></button></div><div style="display: flex; gap: 10px; flex-wrap: wrap;"><div style="display: flex; align-items:center; gap:6px; flex:1;"><span style="font-size:11px;">Qtd Min.</span><input type="number" class="camp-qtd" value="${camp.qtdMinima || 1}" style="margin-bottom:0; padding:10px;" onchange="atualizarListaPremiumGlobal()"></div><div style="display: flex; align-items:center; gap:6px; flex:1;"><span style="font-size:11px;">Bônus(R$)</span><input type="number" class="camp-valor" value="${camp.bonus || 0}" style="margin-bottom:0; padding:10px;" onchange="atualizarListaPremiumGlobal()"></div></div></div>`;
-    }); 
-    htmlCampanhas += '</div></div>';
-
-    let htmlMarcas = `<div style="background: var(--bg-item); padding: 20px; border-radius: 16px; border: 1px solid var(--border-color); margin-top: 20px; text-align: left;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-            <span style="font-size: 14px; font-weight: bold; color: #3b82f6;"><i data-lucide="pie-chart" class="lucide-sm"></i> Marcas da Concorrência</span>
-            <button class="btn-acao btn-enviar" style="background-color: #3b82f6; padding: 8px 14px; font-size: 12px; width: auto;" onclick="adminAddMarcaConcorrente()"><i data-lucide="plus"></i> Nova Marca</button>
-        </div>
-        <div style="display: flex; gap: 8px; flex-wrap: wrap;">`;
-    marcasConcorrentes.forEach((marca, idx) => {
-        htmlMarcas += `<span style="background: var(--bg-container); border: 1px solid var(--border-color); padding: 6px 12px; border-radius: 8px; font-size: 13px; font-weight: bold; display: flex; align-items: center; gap: 8px; color: var(--cor-texto);">${marca} <i data-lucide="x" class="lucide-sm" style="cursor:pointer; color:#ef4444;" onclick="adminRemoverMarcaConcorrente(${idx})"></i></span>`;
-    });
-    htmlMarcas += `</div><span style="font-size: 11px; color: var(--cor-secundaria); display: block; margin-top: 10px;">Essas marcas aparecerão no aplicativo dos seus promotores na hora de lançar o fechamento.</span></div>`;
-
-    let htmlAparelhos = '<div style="font-size: 15px; font-weight: bold; margin: 25px 0 15px 0; text-align: left;"><i data-lucide="smartphone" class="lucide-sm" style="color:var(--primary);"></i> Enquadramento e Valores por Aparelho:</div><div style="display: flex; flex-direction: column; gap: 15px;">';
-    for (let ap in mapaEmojis) {
-        let isFoco = premiumSup[ap] ? "checked": ""; let cfg = aparelhosCfg[ap] || { tipo: 'nenhum' };
-        if (cfg.tipo === undefined) { if (cfg.comissionado === true || cfg.comissionado === 'true') { cfg.tipo = cfg.valorFixo ? 'fixo' : 'nenhum'; } else { cfg.tipo = 'nenhum'; } }
-        let optHtml = `<option value="nenhum" ${cfg.tipo==='nenhum'?'selected':''}>❌ Sem Comissão</option><option value="fixo" ${cfg.tipo==='fixo'?'selected':''}>📌 Valor Fixo (Unitário)</option>`;
-        grupos.forEach(g => { optHtml += `<option value="grupo_${g.id}" ${cfg.tipo==='grupo' && cfg.grupoId===g.id?'selected':''}>📁 Categoria: ${g.nome}</option>`; });
-        htmlAparelhos += `<div style="background: var(--bg-card); padding: 18px; border-radius: 16px; border: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 12px;"><div style="display:flex; justify-content:space-between; align-items:center;"><div style="font-size: 18px; font-weight: 800; display:flex; align-items:center;"><span style="font-size: 24px; margin-right: 10px;">${mapaEmojis[ap]}</span> ${ap.toUpperCase()}</div><label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" class="check-foco-aparelho" value="${ap}" ${isFoco} onchange="atualizarListaPremiumGlobal()" style="width: 18px; height: 18px; margin:0;"><span style="background: var(--primary); color: white; padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight:bold;">Definir como Foco</span></label></div><div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;"><div style="flex:2; min-width:180px;"><span style="font-size:11px; font-weight:bold; color:var(--cor-secundaria); display:block; margin-bottom:4px;">Regra de Pagamento:</span><select class="ap-tipo-regra" data-ap="${ap}" style="margin:0; padding:10px; border-color:var(--primary);" onchange="adminMudarTipoComissaoAp('${ap}', this.value)">${optHtml}</select></div>`;
-        if (cfg.tipo === 'fixo') { htmlAparelhos += `<div style="flex:1; min-width:100px;"><span style="font-size:11px; font-weight:bold; color:var(--cor-secundaria); display:block; margin-bottom:4px;">Valor Fixo (R$):</span><input type="number" class="ap-valor-fixo" data-ap="${ap}" value="${cfg.valorFixo || 0}" style="margin:0; padding:10px;" onchange="atualizarListaPremiumGlobal()"></div>`; } 
-        else if (cfg.tipo === 'grupo') {
-            let grupoEncontrado = grupos.find(x => x.id === cfg.grupoId);
-            if (grupoEncontrado) {
-                htmlAparelhos += `<div style="width: 100%; display: flex; gap: 10px; overflow-x: auto; padding-top: 10px;">`;
-                grupoEncontrado.niveis.forEach((nv, nIdx) => {
-                    let valorNivelAp = (cfg.valores && cfg.valores[nIdx]) ? cfg.valores[nIdx] : 0;
-                    htmlAparelhos += `<div style="flex:1; min-width:110px; background:var(--bg-container); border:1px solid var(--border-color); padding:10px; border-radius:8px;"><span style="font-size:11px; font-weight:bold; color:var(--primary); display:block;">Paga no Nível ${nIdx + 1}:</span><div style="display:flex; align-items:center; gap:4px; margin-top:4px;">R$ <input type="number" class="ap-valor-grupo-nivel" data-ap="${ap}" data-nidx="${nIdx}" value="${valorNivelAp}" style="margin:0; padding:6px; font-weight:bold;" onchange="atualizarListaPremiumGlobal()"></div></div>`;
-                });
-                htmlAparelhos += `</div>`;
-            }
-        }
-        htmlAparelhos += `</div></div>`;
-    }
-    htmlAparelhos += '</div>';
-    container.innerHTML = htmlGrupos + htmlCampanhas + htmlMarcas + htmlAparelhos; loadIcons();
-}
-
-function adminAddGrupo() { let selSup = document.getElementById('seletor-foco-sup').value; if (!valoresComissao[selSup]) valoresComissao[selSup] = {}; if (!valoresComissao[selSup].grupos) valoresComissao[selSup].grupos = []; valoresComissao[selSup].grupos.push({ id: 'g' + Date.now(), nome: 'Nova Categoria', niveis: [{ meta: 1 }] }); renderizarInputsFoco(); atualizarListaPremiumGlobal(); }
-function adminRemoverGrupo(gId) { let selSup = document.getElementById('seletor-foco-sup').value; valoresComissao[selSup].grupos = valoresComissao[selSup].grupos.filter(g => g.id !== gId); if(valoresComissao[selSup].aparelhos) { for (let ap in valoresComissao[selSup].aparelhos) { let cfg = valoresComissao[selSup].aparelhos[ap]; if (cfg.tipo === 'grupo' && cfg.grupoId === gId) { cfg.tipo = 'nenhum'; delete cfg.grupoId; } } } renderizarInputsFoco(); atualizarListaPremiumGlobal(); }
-function adminAddNivelGrupo(gId) { let selSup = document.getElementById('seletor-foco-sup').value; let g = valoresComissao[selSup].grupos.find(x => x.id === gId); if (g) { g.niveis.push({ meta: 10 }); renderizarInputsFoco(); atualizarListaPremiumGlobal(); } }
-function adminRemoverNivelGrupo(gId, nIdx) { let selSup = document.getElementById('seletor-foco-sup').value; let g = valoresComissao[selSup].grupos.find(x => x.id === gId); if (g) { g.niveis.splice(nIdx, 1); renderizarInputsFoco(); atualizarListaPremiumGlobal(); } }
-function adminEditGrupoNome(gId, val) { let selSup = document.getElementById('seletor-foco-sup').value; let g = valoresComissao[selSup].grupos.find(x => x.id === gId); if (g) { g.nome = val; atualizarListaPremiumGlobal(); } }
-function adminEditGrupoNivel(gId, nIdx, field, val) { let selSup = document.getElementById('seletor-foco-sup').value; let g = valoresComissao[selSup].grupos.find(x => x.id === gId); if (g && g.niveis[nIdx]) { g.niveis[nIdx][field] = Number(val); atualizarListaPremiumGlobal(); } }
-function adminMudarTipoComissaoAp(ap, val) { atualizarListaPremiumGlobal(); renderizarInputsFoco(); }
-
-function atualizarListaPremiumGlobal() {
-    let selSup = document.getElementById('seletor-foco-sup').value;
-    let taxaInputs = document.getElementById('input-taxa-copart'); if (taxaInputs) taxasCoparticipacao[selSup] = Number(taxaInputs.value);
-    
-    let pObj = {}; document.querySelectorAll('.check-foco-aparelho').forEach(cb => { if (cb.checked) pObj[cb.value] = 1; }); aparelhosPremium[selSup] = pObj;
-    if (!valoresComissao[selSup]) valoresComissao[selSup] = {};
-    
-    let campanhas = []; document.querySelectorAll('.linha-campanha-dinamica').forEach(bloco => { campanhas.push({ aparelho: bloco.querySelector('.camp-aparelho').value, promotorAlvo: bloco.querySelector('.camp-promotor').value, qtdMinima: Number(bloco.querySelector('.camp-qtd').value), bonus: Number(bloco.querySelector('.camp-valor').value) }); }); valoresComissao[selSup].campanhasPersonalizadas = campanhas;
-    
-    if(!valoresComissao[selSup].aparelhos) valoresComissao[selSup].aparelhos = {};
-    let cfgAp = valoresComissao[selSup].aparelhos;
-
-    document.querySelectorAll('.ap-tipo-regra').forEach(sel => {
-         let ap = sel.getAttribute('data-ap'); let val = sel.value; if (!cfgAp[ap]) cfgAp[ap] = {};
-         if (val === 'nenhum') { cfgAp[ap] = { tipo: 'nenhum' }; } 
-         else if (val === 'fixo') { let inputFixo = document.querySelector(`.ap-valor-fixo[data-ap="${ap}"]`); cfgAp[ap] = { tipo: 'fixo', valorFixo: inputFixo ? Number(inputFixo.value) : 0 }; } 
-         else if (val.startsWith('grupo_')) { 
-              let gId = val.replace('grupo_', ''); cfgAp[ap] = { tipo: 'grupo', grupoId: gId, valores: {} };
-              document.querySelectorAll(`.ap-valor-grupo-nivel[data-ap="${ap}"]`).forEach(inp => { let nIdx = inp.getAttribute('data-nidx'); cfgAp[ap].valores[nIdx] = Number(inp.value); });
-         }
-    });
-}
-
-function adicionarLinhaCampanha() { let selSup = document.getElementById('seletor-foco-sup').value; if (!valoresComissao[selSup]) valoresComissao[selSup] = {}; if (!valoresComissao[selSup].campanhasPersonalizadas) valoresComissao[selSup].campanhasPersonalizadas = []; valoresComissao[selSup].campanhasPersonalizadas.push({ aparelho: 'todos', promotorAlvo: 'todos', qtdMinima: 1, bonus: 50 }); renderizarInputsFoco(); }
-function removerLinhaCampanha(index) { let selSup = document.getElementById('seletor-foco-sup').value; if (valoresComissao[selSup] && valoresComissao[selSup].campanhasPersonalizadas) { valoresComissao[selSup].campanhasPersonalizadas.splice(index, 1); renderizarInputsFoco(); atualizarListaPremiumGlobal(); } }
-
-function fecharModalEdicao() { document.getElementById('modal-edicao').classList.remove('ativo'); }
-
-function adminAbrirModalSenha(login) { 
-    document.getElementById('modal-edicao-titulo').innerHTML = `<i data-lucide="key"></i> Senha (@${login})`; 
-    document.getElementById('modal-edicao-corpo').innerHTML = `<input type="text" id="input-edit-senha" value="${bancoUsuarios[login].senha}" placeholder="Nova Senha">`; 
-    let btn = document.getElementById('btn-salvar-edicao'); 
-    btn.onclick = function() { 
-        let val = document.getElementById('input-edit-senha').value.trim(); 
-        if(val) { 
-            bancoUsuarios[login].senha = val; 
-            mostrarToast("Senha alterada!", "sucesso"); 
-            fecharModalEdicao(); 
-            renderizarAdminUsuarios(); 
-            if (document.getElementById('modal-gerenciar-equipe').classList.contains('ativo')) renderizarModalEquipe(); 
-        } 
-    }; 
-    document.getElementById('modal-edicao').classList.add('ativo'); 
-    loadIcons(); 
-}
-
-function adminAbrirModalNome(login) { 
-    document.getElementById('modal-edicao-titulo').innerHTML = `<i data-lucide="edit-3"></i> Nome (@${login})`; 
-    document.getElementById('modal-edicao-corpo').innerHTML = `<input type="text" id="input-edit-nome" value="${bancoUsuarios[login].nome || login}" placeholder="Nome Completo">`; 
-    let btn = document.getElementById('btn-salvar-edicao'); 
-    btn.onclick = function() { 
-        let val = document.getElementById('input-edit-nome').value.trim(); 
-        if(val) { 
-            bancoUsuarios[login].nome = val; 
-            mostrarToast("Nome alterada!", "sucesso"); 
-            fecharModalEdicao(); 
-            renderizarAdminUsuarios(); 
-            if (document.getElementById('modal-gerenciar-equipe').classList.contains('ativo')) renderizarModalEquipe(); 
-        } 
-    }; 
-    document.getElementById('modal-edicao').classList.add('ativo'); 
-    loadIcons(); 
-}
-
-function adminAbrirModalRegiao(login) { 
-    document.getElementById('modal-edicao-titulo').innerHTML = `<i data-lucide="globe"></i> Região (@${login})`; 
-    document.getElementById('modal-edicao-corpo').innerHTML = `<input type="text" id="input-edit-regiao" value="${bancoUsuarios[login].regiao || ''}" placeholder="Nome da Região">`; 
-    let btn = document.getElementById('btn-salvar-edicao'); 
-    btn.onclick = function() { 
-        let val = document.getElementById('input-edit-regiao').value.trim().toUpperCase(); 
-        if(val) { 
-            bancoUsuarios[login].regiao = val; 
-            mostrarToast("Região alterada!", "sucesso"); 
-            fecharModalEdicao(); 
-            renderizarAdminUsuarios(); 
-        } 
-    }; 
-    document.getElementById('modal-edicao').classList.add('ativo'); 
-    loadIcons(); 
-}
-
-function adminAbrirModalMeta(login) { 
-    document.getElementById('modal-edicao-titulo').innerHTML = `<i data-lucide="target"></i> Meta (@${login})`; 
-    document.getElementById('modal-edicao-corpo').innerHTML = `<input type="number" id="input-edit-meta" value="${bancoUsuarios[login].meta || 0}" placeholder="Meta Mensal">`; 
-    let btn = document.getElementById('btn-salvar-edicao'); 
-    btn.onclick = function() { 
-        let val = parseInt(document.getElementById('input-edit-meta').value) || 0; 
-        bancoUsuarios[login].meta = val; 
-        mostrarToast("Meta alterada!", "sucesso"); 
-        fecharModalEdicao(); 
-        if (document.getElementById('modal-gerenciar-equipe').classList.contains('ativo')) renderizarModalEquipe(); 
-    }; 
-    document.getElementById('modal-edicao').classList.add('ativo'); 
-    loadIcons(); 
-}
-
-function adminAbrirModalCapa(loja) { 
-    document.getElementById('modal-edicao-titulo').innerHTML = `<i data-lucide="layers"></i> Capa (${loja})`; 
-    document.getElementById('modal-edicao-corpo').innerHTML = `<input type="number" id="input-edit-capa" value="${lojasConfig[loja].capa || 0}" placeholder="Capa da Loja">`; 
-    let btn = document.getElementById('btn-salvar-edicao'); 
-    btn.onclick = function() { 
-        let val = parseInt(document.getElementById('input-edit-capa').value) || 0; 
-        lojasConfig[loja].capa = val; 
-        mostrarToast("Capa alterada!", "sucesso"); 
-        fecharModalEdicao(); 
-        if (document.getElementById('modal-gerenciar-equipe').classList.contains('ativo')) renderizarModalEquipe(); 
-    }; 
-    document.getElementById('modal-edicao').classList.add('ativo'); 
-    loadIcons(); 
-}
-
-function adminAbrirModalPermissoes(login) { 
-    let p = bancoUsuarios[login].permissoes || { vendas: true, acomp: true, estoque_ver: true, estoque_editar: true }; 
-    document.getElementById('modal-edicao-titulo').innerHTML = `<i data-lucide="shield"></i> Permissões (@${login})`; 
-    let html = `<div style="display:flex; flex-direction:column; gap:10px; font-size: 14px; color: var(--cor-texto);">`; 
-    html += `<label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="edit-p-vendas" ${p.vendas ? 'checked':''}> Lançar Vendas</label>`; 
-    html += `<label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="edit-p-acomp" ${p.acomp ? 'checked':''}> Acompanhamento</label>`; 
-    html += `<label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="edit-p-est-ver" ${p.estoque_ver ? 'checked':''}> Ver Estoque</label>`; 
-    html += `<label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="edit-p-est-edit" ${p.estoque_editar ? 'checked':''}> Editar Estoque</label></div>`; 
-    document.getElementById('modal-edicao-corpo').innerHTML = html; 
-    let btn = document.getElementById('btn-salvar-edicao'); 
-    btn.onclick = function() { 
-        bancoUsuarios[login].permissoes = { 
-            vendas: document.getElementById('edit-p-vendas').checked, 
-            acomp: document.getElementById('edit-p-acomp').checked, 
-            estoque_ver: document.getElementById('edit-p-est-ver').checked, 
-            estoque_editar: document.getElementById('edit-p-est-edit').checked 
-        }; 
-        mostrarToast("Permissões atualizadas!", "sucesso"); 
-        fecharModalEdicao(); 
-    }; 
-    document.getElementById('modal-edicao').classList.add('ativo'); 
-    loadIcons(); 
-}
-
-function adminAbrirModalLojas(login) { 
-    document.getElementById('modal-edicao-titulo').innerHTML = `<i data-lucide="store"></i> Lojas (@${login})`; 
-    let permitidas = bancoUsuarios[login].lojasPermitidas || []; 
-    let supLojas = getLojasDaRegiao(bancoUsuarios[login].criadoPor || usuarioLogado.id); 
-    if (usuarioLogado.id === "master" || usuarioLogado.cargo === "gestor") { supLojas = Object.keys(lojasConfig); } 
-    let html = '<div style="display:flex; flex-direction:column; gap:8px; max-height:200px; overflow-y:auto; text-align:left; color: var(--cor-texto); font-size:14px;">'; 
-    supLojas.forEach(l => { 
-        let checked = permitidas.includes(l) ? 'checked' : ''; 
-        html += `<label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" class="edit-loja-check" value="${l}" ${checked}> ${l}</label>`; 
-    }); 
-    html += '</div>'; 
-    if(supLojas.length === 0) html = "<p style='font-size:13px; color:var(--cor-secundaria);'>Nenhuma loja disponível.</p>"; 
-    document.getElementById('modal-edicao-corpo').innerHTML = html; 
-    
-    let btn = document.getElementById('btn-salvar-edicao'); 
-    btn.onclick = function() { 
-        let selecionadas = Array.from(document.querySelectorAll('.edit-loja-check:checked')).map(cb => cb.value); 
-        bancoUsuarios[login].lojasPermitidas = selecionadas; 
-        mostrarToast("Lojas atualizadas!", "sucesso"); 
-        fecharModalEdicao(); 
-        if (document.getElementById('modal-gerenciar-equipe').classList.contains('ativo')) renderizarModalEquipe(); 
-    }; 
-    document.getElementById('modal-edicao').classList.add('ativo'); 
-    loadIcons(); 
-}
-
-// ================= GERENCIADOR DE MARCAS CONCORRENTES =================
-window.adminAddMarcaConcorrente = function() {
-    let selSup = document.getElementById('seletor-foco-sup').value;
-    document.getElementById('input-nova-marca').value = "";
-    document.getElementById('modal-nova-marca').classList.add('ativo');
-    loadIcons();
-};
-
-window.fecharModalNovaMarca = function() {
-    document.getElementById('modal-nova-marca').classList.remove('ativo');
-};
-
-window.confirmarNovaMarca = function() {
-    let selSup = document.getElementById('seletor-foco-sup').value;
-    let novaMarca = document.getElementById('input-nova-marca').value.trim();
-    if (!novaMarca) {
-        return mostrarToast("Digite o nome da marca.", "alerta");
-    }
-    if (!valoresComissao[selSup]) valoresComissao[selSup] = {};
-    if (!valoresComissao[selSup].marcas_concorrentes) {
-        valoresComissao[selSup].marcas_concorrentes = ["Samsung", "Motorola", "Outros"];
-    }
-    valoresComissao[selSup].marcas_concorrentes.push(novaMarca);
-    if (typeof renderizarInputsFoco === "function") renderizarInputsFoco();
-    if (typeof atualizarListaPremiumGlobal === "function") atualizarListaPremiumGlobal();
-    mostrarToast("Marca adicionada! Clique em 'Salvar' no topo.", "sucesso");
-    fecharModalNovaMarca();
-};
-
-window.adminRemoverMarcaConcorrente = function(idx) {
-    let selSup = document.getElementById('seletor-foco-sup').value;
-    if (valoresComissao[selSup] && valoresComissao[selSup].marcas_concorrentes) {
-        valoresComissao[selSup].marcas_concorrentes.splice(idx, 1);
-        if (typeof renderizarInputsFoco === "function") renderizarInputsFoco();
-        if (typeof atualizarListaPremiumGlobal === "function") atualizarListaPremiumGlobal();
-    }
-};
-
-// ================= CARD DE BATALHA & CATÁLOGO TÁTICO =================
-async function abrirBatalha() {
-    mudarTela('tela-batalha');
-    const grid = document.getElementById('grid-batalha-aparelhos');
-    if (!grid) return; 
-    
-    let html = "";
-    for (let ap in mapaEmojis) {
-        html += `
-        <div class="item-aparelho" onclick="carregarCardTatico('${ap}')" style="cursor: pointer;">
-            <div class="card-aparelho" style="width: 75px; height: 75px;">
-                <span class="emoji-card" style="font-size: 32px;">${mapaEmojis[ap]}</span>
-            </div>
-            <span class="nome-card" style="font-size: 11px;">${ap.toUpperCase()}</span>
-        </div>`;
-    }
-    grid.innerHTML = html || "<div class='mensagem-vazia'>Nenhum aparelho cadastrado.</div>";
-    document.getElementById('card-tatico-detalhe').style.display = "none";
-    loadIcons();
-}
-
-async function carregarCardTatico(aparelhoNome) {
-    mostrarToast(`Buscando táticas para ${aparelhoNome.toUpperCase()}...`, "info");
-    
-    let supId = usuarioLogado.criadoPor || "geral";
-    if (usuarioLogado.cargo === "supervisor") supId = usuarioLogado.id;
-    if (usuarioLogado.cargo === "gestor" || usuarioLogado.id === "master") supId = "geral";
-    
-    try {
-        const { data, error } = await supabaseClient
-            .from('catalogo_batalha')
-            .select('*')
-            .eq('supervisor_login', supId)
-            .eq('aparelho_chave', aparelhoNome.toLowerCase())
-            .single();
-            
-        let argumentos = "Nenhum argumento cadastrado pelo supervisor para este aparelho ainda.";
-        let contra = "Nenhum contra-ataque cadastrado.";
-        let pdfUrl = "";
-        
-        if (data) {
-            argumentos = data.argumentos || argumentos;
-            contra = data.contra_ataque || contra;
-            pdfUrl = data.pdf_url || "";
-        }
-        
-        document.getElementById('batalha-titulo-aparelho').innerHTML = `${mapaEmojis[aparelhoNome] || ''} ${aparelhoNome.toUpperCase()}`;
-        document.getElementById('batalha-texto-argumentos').innerText = argumentos;
-        document.getElementById('batalha-texto-contra').innerText = contra;
-        
-        let containerPdf = document.getElementById('container-pdf-batalha');
-        if (pdfUrl) {
-            document.getElementById('link-pdf-batalha').href = pdfUrl;
-            containerPdf.style.display = "block";
-        } else {
-            containerPdf.style.display = "none";
-        }
-        
-        document.getElementById('card-tatico-detalhe').style.display = "block";
-        loadIcons();
-    } catch (e) {
-        console.error("Erro ao carregar card tático:", e);
-        document.getElementById('batalha-titulo-aparelho').innerHTML = `${mapaEmojis[aparelhoNome] || ''} ${aparelhoNome.toUpperCase()}`;
-        document.getElementById('batalha-texto-argumentos').innerText = "Cadastre os argumentos na aba Ajustes.";
-        document.getElementById('batalha-texto-contra').innerText = "Cadastre os contra-ataques na aba Ajustes.";
-        document.getElementById('container-pdf-batalha').style.display = "none";
-        document.getElementById('card-tatico-detalhe').style.display = "block";
-        loadIcons();
-    }
-}
-
-// ================= MARKET SHARE (PROMOTOR E DASHBOARD) =================
-function abrirModalFechamento() {
-    let selLoja = document.getElementById('select-loja-share');
-    let htmlLojas = '';
-
-    let lojas = [];
-    if (usuarioLogado.cargo === "promotor") {
-        lojas = usuarioLogado.lojasPermitidas || [];
-        if (typeof lojas === 'string') { try { lojas = JSON.parse(lojas); } catch(e) { lojas = [lojas]; } }
-    } else if (usuarioLogado.cargo === "supervisor" && typeof getLojasDaRegiao === "function") {
-        lojas = getLojasDaRegiao(usuarioLogado.id);
-    } else {
-        lojas = Object.keys(lojasConfig);
-    }
-
-    if (!lojas || lojas.length === 0) return mostrarToast("Nenhuma loja encontrada na sua região.", "alerta");
-    
-    lojas.sort().forEach(l => { 
-        let nomePromotor = getPromotorDaLoja(l); 
-        htmlLojas += `<option value="${l}">${l} (👤 ${nomePromotor})</option>`; 
-    });
-    selLoja.innerHTML = htmlLojas;
-
-    let supId = usuarioLogado.criadoPor || "geral";
-    if (usuarioLogado.cargo === "supervisor") supId = usuarioLogado.id;
-    let vComissao = valoresComissao[supId] || valoresComissao["geral"] || {};
-    let marcas = vComissao.marcas_concorrentes || ["Samsung", "Motorola", "Outros"];
-    
-    let containerMarcas = document.getElementById('container-inputs-concorrencia');
-    let htmlInputs = "";
-    marcas.forEach((marca, idx) => {
-        htmlInputs += `
-        <div>
-            <span style="font-size: 11px; font-weight: bold; color: var(--cor-secundaria);">${marca}</span>
-            <input type="number" id="input-concorrente-${idx}" data-marca="${marca}" placeholder="Qtd" style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); text-align: center; margin: 0;">
-        </div>`;
-    });
-    if (containerMarcas) containerMarcas.innerHTML = htmlInputs;
-
-    document.getElementById('modal-fechamento-share').classList.add('ativo');
-    loadIcons();
-}
-
-async function enviarFechamentoShare() {
-    if (!navigator.onLine) { mostrarToast("Sem internet!", "erro"); return; }
-    
-    let loja = document.getElementById('select-loja-share').value;
-    if (!loja) return mostrarToast("Selecione uma loja.", "alerta");
-    
-    let totalConcorrencia = 0;
-    let objConcorrentes = {};
-    
-    let inputs = document.querySelectorAll('[id^="input-concorrente-"]');
-    inputs.forEach(inp => {
-        let qtd = parseInt(inp.value) || 0;
-        let marca = inp.getAttribute('data-marca');
-        objConcorrentes[marca] = qtd;
-        totalConcorrencia += qtd;
-    });
-
-    if (totalConcorrencia === 0) return mostrarToast("Preencha as vendas da concorrência.", "alerta");
-
-    const btn = document.getElementById("btn-salvar-share");
-    btn.disabled = true;
-    btn.innerHTML = '<i data-lucide="loader-2" style="animation: spin 1s linear infinite;"></i> Salvando...';
-    loadIcons();
-
-    let payload = {
-        data_fechamento: new Date().toISOString().split('T')[0],
-        loja: loja,
-        promotor_login: usuarioLogado.id,
-        vendas_oppo: 0, 
-        vendas_total_loja: totalConcorrencia, 
-        criado_por_supervisor: usuarioLogado.criadoPor,
-        concorrentes_dados: objConcorrentes 
-    };
-
-    try {
-        const { error } = await supabaseClient.from('market_share').insert([payload]);
-        if (error) throw error;
-        mostrarToast("Fechamento registrado com sucesso!", "sucesso");
-        document.getElementById('modal-fechamento-share').classList.remove('ativo');
-    } catch (e) {
-        console.error("Erro no Share:", e);
-        mostrarToast("Erro ao registrar fechamento.", "erro");
-    } finally {
-        btn.disabled = false;
-        btn.innerHTML = 'Salvar Fechamento';
-        loadIcons();
-    }
-}
-
 async function carregarGraficosShare() {
     if (!navigator.onLine) { mostrarToast("Sem conexão.", "erro"); return; }
     mostrarToast("Calculando inteligência de mercado...", "info");
     
-    let mesDash = document.getElementById("seletor-mes-dash").value;
-    let y, m;
-    let hoje = new Date();
-    
-    if (mesDash) {
-        let partes = mesDash.split('/');
-        m = parseInt(partes[0], 10);
-        y = parseInt(partes[1], 10);
-    } else {
-        m = hoje.getMonth() + 1;
-        y = hoje.getFullYear();
-    }
-    
-    let dtInicioVal = [y, String(m).padStart(2,'0'), '01'].join('-');
-    let dtFimVal = [y, String(m).padStart(2,'0'), new Date(y, m, 0).getDate()].join('-');
+    let dtInicio = document.getElementById("dash-data-inicio") ? document.getElementById("dash-data-inicio").value : null;
+    let dtFim = document.getElementById("dash-data-fim") ? document.getElementById("dash-data-fim").value : null;
 
     try {
-        let query = supabaseClient.from('market_share').select('*').gte('data_fechamento', dtInicioVal).lte('data_fechamento', dtFimVal);
+        let query = supabaseClient.from('market_share').select('*');
+        if (dtInicio) query = query.gte('data_fechamento', dtInicio);
+        if (dtFim) query = query.lte('data_fechamento', dtFim);
             
         let selSup = document.getElementById('filtro-supervisor-dash');
         let selProm = document.getElementById('filtro-promotor-dash');
         let selLoja = document.getElementById('filtro-loja-dash');
         
+        let containerSup = document.getElementById('container-filtro-supervisor-dash');
+        let isSupVisible = containerSup && containerSup.style.display !== "none";
+        
+        let containerProm = document.getElementById('container-filtro-promotor-dash');
+        let isPromVisible = containerProm && containerProm.style.display !== "none";
+
         let escopoTexto = "no mercado analisado"; 
 
-        // TRAVA DE SEGURANÇA NO BANCO DE DADOS
+        let supAlvo = "todos";
+        if (usuarioLogado.cargo === "supervisor") {
+            supAlvo = usuarioLogado.id; 
+        } else if (isSupVisible && selSup && selSup.value !== "todos") {
+            supAlvo = selSup.value; 
+        }
+
         if (usuarioLogado.cargo === "promotor") {
             query = query.eq('promotor_login', usuarioLogado.id);
             escopoTexto = "nas suas lojas";
         } else {
-            if (selSup && selSup.style.display !== "none" && selSup.value !== "todos") {
-                 query = query.eq('criado_por_supervisor', selSup.value); 
-                 escopoTexto = `na equipe filtrada`;
+            if (supAlvo !== "todos") {
+                query = query.eq('criado_por_supervisor', supAlvo);
+                escopoTexto = "na equipe filtrada";
             }
-            if (selProm && selProm.style.display !== "none" && selProm.value !== "todos") {
-                 query = query.eq('promotor_login', selProm.value); 
-                 escopoTexto = `nas lojas do promotor`;
+            if (isPromVisible && selProm && selProm.value !== "todos") {
+                query = query.eq('promotor_login', selProm.value);
+                escopoTexto = "nas lojas do promotor";
             }
         }
 
         if (selLoja && selLoja.value !== "todas") {
              query = query.eq('loja', selLoja.value);
-             escopoTexto = `nesta loja`; 
+             escopoTexto = "nesta loja"; 
         }
         
         const { data: dbShare, error } = await query;
@@ -1914,12 +1586,19 @@ async function carregarGraficosShare() {
         let resumoGlobal = { oppo: 0, concorrentes: {}, total: 0 };
         let resumoLojas = {};
 
-        // TRAVA DE SEGURANÇA NA MEMÓRIA
-        let lojasPermitidas = [];
+        let lojasDaBusca = [];
         if (usuarioLogado.cargo === "promotor") {
-            lojasPermitidas = usuarioLogado.lojasPermitidas || [];
-            if (typeof lojasPermitidas === 'string') { 
-                try { lojasPermitidas = JSON.parse(lojasPermitidas); } catch(e) { lojasPermitidas = [lojasPermitidas]; } 
+            lojasDaBusca = usuarioLogado.lojasPermitidas || [];
+            if (typeof lojasDaBusca === 'string') { try { lojasDaBusca = JSON.parse(lojasDaBusca); } catch(e) { lojasDaBusca = [lojasDaBusca]; } }
+        } else {
+            let promotorAtual = (isPromVisible && selProm) ? selProm.value : "todos";
+            if (promotorAtual !== "todos") {
+                let userP = bancoUsuarios[promotorAtual];
+                if (userP && userP.lojasPermitidas) lojasDaBusca = userP.lojasPermitidas;
+            } else if (supAlvo !== "todos" && typeof getLojasDaRegiao === "function") {
+                lojasDaBusca = getLojasDaRegiao(supAlvo);
+            } else {
+                lojasDaBusca = Object.keys(lojasConfig);
             }
         }
 
@@ -1928,7 +1607,7 @@ async function carregarGraficosShare() {
                 let match = (row.Vendedor || "").match(/^\[(.*?)\]/);
                 let lojaNome = match ? match[1] : "Outras";
                 
-                if (usuarioLogado.cargo === "promotor" && !lojasPermitidas.includes(lojaNome)) return;
+                if (!lojasDaBusca.includes(lojaNome)) return;
                 if (selLoja && selLoja.value !== "todas" && lojaNome !== selLoja.value) return;
 
                 let qtd = (row.Aparelhos || "").split("||").filter(x => x.trim() !== "").length;
@@ -1944,10 +1623,6 @@ async function carregarGraficosShare() {
         if (dbShare) {
             dbShare.forEach(row => {
                 let dadosConc = row.concorrentes_dados || {};
-                if (Object.keys(dadosConc).length === 0 && (row.vendas_samsung > 0 || row.vendas_motorola > 0 || row.vendas_outros > 0)) {
-                    dadosConc = { "Samsung": row.vendas_samsung || 0, "Motorola": row.vendas_motorola || 0, "Outros": row.vendas_outros || 0 };
-                }
-
                 let totalConcLinha = 0;
                 for (let marca in dadosConc) {
                     let qtd = dadosConc[marca];
@@ -1981,11 +1656,9 @@ function renderizarPizzaShare(resumoGlobal, escopoTexto) {
     if (chartShareGlobal) chartShareGlobal.destroy();
     
     let pctOppo = resumoGlobal.total > 0 ? ((resumoGlobal.oppo / resumoGlobal.total) * 100).toFixed(1) : 0;
-    
     document.getElementById('texto-resumo-share').innerHTML = `A OPPO domina <strong style="font-size: 18px; color: #10b981;">${pctOppo}%</strong> ${escopoTexto}!`;
 
     let corTexto = document.body.classList.contains('dark-mode') ? '#ffffff' : '#475569';
-
     let labels = ['OPPO'];
     let data = [resumoGlobal.oppo];
     let bgColors = ['#10b981']; 
@@ -2058,17 +1731,11 @@ function renderizarTermometroLojas(resumoLojas) {
         let corStatus, iconeStatus, bgAlerta;
         
         if (l.pct >= 35) {
-            corStatus = "#10b981"; 
-            iconeStatus = "trending-up";
-            bgAlerta = "rgba(16, 185, 129, 0.05)";
+            corStatus = "#10b981"; iconeStatus = "trending-up"; bgAlerta = "rgba(16, 185, 129, 0.05)";
         } else if (l.pct >= 15) {
-            corStatus = "#f59e0b"; 
-            iconeStatus = "thermometer";
-            bgAlerta = "rgba(245, 158, 11, 0.05)";
+            corStatus = "#f59e0b"; iconeStatus = "thermometer"; bgAlerta = "rgba(245, 158, 11, 0.05)";
         } else {
-            corStatus = "#ef4444"; 
-            iconeStatus = "alert-triangle";
-            bgAlerta = "rgba(239, 68, 68, 0.1)";
+            corStatus = "#ef4444"; iconeStatus = "alert-triangle"; bgAlerta = "rgba(239, 68, 68, 0.1)";
         }
 
         html += `
@@ -2090,4 +1757,421 @@ function renderizarTermometroLojas(resumoLojas) {
     
     div.innerHTML = html;
     loadIcons();
+}
+
+// ================= ADMIN, CONFIGURAÇÕES E BATALHA =================
+function renderizarSelectRegioes() { let regioesUnicas = new Set(); for (let k in bancoUsuarios) { if (bancoUsuarios[k].regiao) regioesUnicas.add(bancoUsuarios[k].regiao.toUpperCase()); } let sel = document.getElementById('admin-gs-regiao-select'); if (!sel) return; let html = '<option value="">Selecione a Região...</option>'; let regioesArray = Array.from(regioesUnicas).sort(); regioesArray.forEach(r => { html += `<option value="${r}">${r}</option>`; }); html += '<option value="NOVA">➕ Criar Nova Região</option>'; sel.innerHTML = html; }
+function verificarNovaRegiao(val) { let inp = document.getElementById('admin-gs-regiao-input'); if(val === 'NOVA') { inp.style.display = 'block'; } else { inp.style.display = 'none'; inp.value = ''; } }
+
+function abrirAdmin() { 
+    mudarTela('tela-admin'); let selSupFoco = document.getElementById('seletor-foco-sup');
+    if (usuarioLogado.cargo === "gestor" || usuarioLogado.cargo === "regional" || usuarioLogado.id === "master") {
+        if(usuarioLogado.cargo === "gestor" || usuarioLogado.id === "master") { document.getElementById('bloco-criar-gestor').style.display = "block"; renderizarSelectRegioes(); } else { document.getElementById('bloco-criar-gestor').style.display = "none"; }
+        document.getElementById('bloco-admin-foco').style.display = "block"; selSupFoco.innerHTML = '<option value="geral">Geral (Padrão da Empresa)</option>'; 
+        for(let k in bancoUsuarios) { if (bancoUsuarios[k].cargo === "supervisor" && podeGerenciar(usuarioLogado, k)) { selSupFoco.innerHTML += `<option value="${k}">Equipe: ${bancoUsuarios[k].nome || k}</option>`; } } 
+    } 
+    else if (usuarioLogado.cargo === "supervisor") {
+        document.getElementById('bloco-criar-gestor').style.display = "none"; document.getElementById('bloco-admin-foco').style.display = "block"; 
+        selSupFoco.innerHTML = `<option value="${usuarioLogado.id}">Minha Equipe (${usuarioLogado.nome})</option>`; selSupFoco.value = usuarioLogado.id; 
+    } 
+    else { document.getElementById('bloco-admin-foco').style.display = "none"; document.getElementById('bloco-criar-gestor').style.display = "none"; }
+    
+    if (usuarioLogado.cargo === "regional") { document.getElementById('container-admin-regiao').style.display = 'none'; }
+    renderizarAdminUsuarios(); renderizarInputsFoco(); renderizarAdminAparelhos(); 
+}
+
+function renderizarAdminUsuarios() {
+    const div = document.getElementById('lista-admin-supervisores'); let htmlContent = ""; const filtroCargo = document.getElementById('filtro-cargo-admin') ? document.getElementById('filtro-cargo-admin').value : 'todos'; const busca = document.getElementById('busca-admin') ? document.getElementById('busca-admin').value.toLowerCase() : '';
+    for(let l in bancoUsuarios) { 
+        let u = bancoUsuarios[l]; 
+        if (u.cargo === "promotor" && usuarioLogado.id !== "master") continue; if (!podeGerenciar(usuarioLogado, l) && l !== usuarioLogado.id) continue;
+        if (filtroCargo !== 'todos') { if (filtroCargo === 'regional' && u.cargo !== 'regional' && u.cargo !== 'gestor') continue; if (filtroCargo !== 'regional' && u.cargo !== filtroCargo) continue; }
+        const nomeUpper = (u.nome || l).toLowerCase(); if (busca && !nomeUpper.includes(busca) && !l.includes(busca)) continue;
+
+        let labelCargo = l === "master" ? "👑 Master" : (u.cargo === "gestor" ? "👔 Gestor" : (u.cargo === "regional" ? "🌎 Regional" : (u.cargo === "supervisor" ? "📍 Supervisor" : "👤 Promotor"))); let subLabel = u.regiao ? ` - Região: ${u.regiao}` : "";
+        let btnGerenciar = (u.cargo === "supervisor") ? `<button class="btn-editar" style="background: var(--primary-gradiente); color:white; border:none; padding: 12px; border-radius: 12px; width: 100%; margin-top: 12px; font-weight:bold;" onclick="abrirPainelEquipe('${l}')"><i data-lucide="settings" class="lucide-sm"></i> Gerenciar Equipe de ${u.nome || l}</button>` : (usuarioLogado.id === "master" && u.cargo === "promotor") ? `<button class="btn-editar" style="background: var(--primary-gradiente); color:white; border:none; padding: 12px; border-radius: 12px; width: 100%; margin-top: 12px;" onclick="adminAbrirModalLojas('${l}')"><i data-lucide="settings" class="lucide-sm"></i> Gerenciar Lojas</button>` : ''; 
+        let btnRegiao = (usuarioLogado.cargo === "gestor" || usuarioLogado.id === "master") ? `<button class="btn-editar" style="background-color: #8b5cf6; color:white; border:none;" onclick="adminAbrirModalRegiao('${l}')"><i data-lucide="globe"></i> Região</button>` : ""; 
+        let btnSenha = `<button class="btn-editar" style="background-color: #f59e0b; color: white; border:none;" onclick="adminAbrirModalSenha('${l}')"><i data-lucide="key"></i> Senha</button>`; let btnExcluir = (usuarioLogado.id === "master" && l !== "master") ? `<button class="btn-excluir" onclick="adminRemoverUsuario('${l}')"><i data-lucide="trash-2"></i></button>` : ""; 
+        htmlContent += `<div class="linha-admin" style="flex-direction: column; align-items: stretch; padding: 16px; background: var(--bg-card); margin-bottom: 12px; border-radius: 16px; border: 1px solid var(--border-color);"><div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed var(--border-color); padding-bottom: 10px; margin-bottom: 10px;"><div style="text-align: left;"><strong style="font-size: 16px;">${u.nome || l} <span style="font-size: 11px; color: var(--cor-secundaria);">(@${l})</span></strong><span style="font-size: 12px; font-weight: bold; color: var(--primary);">${labelCargo}${subLabel}</span></div><div style="display: flex; gap: 8px;">${btnRegiao} ${btnSenha} ${btnExcluir}</div></div>${btnGerenciar}</div>`; 
+    } div.innerHTML = htmlContent || "<p style='color:var(--cor-secundaria); font-size:13px;'>Nenhum usuário encontrado.</p>"; loadIcons();
+}
+
+function filtrarListaModal(classe, termo) { termo = termo.toLowerCase(); let itens = document.querySelectorAll('.' + classe); itens.forEach(item => { if(item.innerText.toLowerCase().includes(termo)) { item.style.display = "block"; } else { item.style.display = "none"; } }); }
+
+function abrirPainelEquipe(login) {
+    supervisorGerenciadoAtual = login;
+    let supNome = bancoUsuarios[login].nome || login;
+    let titulo = document.getElementById('titulo-modal-equipe');
+    if (titulo) titulo.innerHTML = `<i data-lucide="users"></i> Equipe de ${supNome}`;
+    renderizarModalEquipe();
+    document.getElementById('modal-gerenciar-equipe').classList.add('ativo');
+    switchTab('equipe-tab-promotores', 'equipe-tab');
+    loadIcons();
+}
+
+function fecharModalEquipe() { document.getElementById('modal-gerenciar-equipe').classList.remove('ativo'); supervisorGerenciadoAtual = null; }
+
+function getLojasDaRegiao(supLogin) {
+    let lojas = [];
+    for (let l in lojasConfig) {
+        if (lojasConfig[l].supervisor === supLogin) {
+            lojas.push(l);
+        } else if (!lojasConfig[l].supervisor) {
+            let promotoresDoSup = Object.keys(bancoUsuarios).filter(k => bancoUsuarios[k].cargo === "promotor" && bancoUsuarios[k].criadoPor === supLogin);
+            let pertence = promotoresDoSup.some(p => bancoUsuarios[p].lojasPermitidas && bancoUsuarios[p].lojasPermitidas.includes(l));
+            if (pertence) { lojas.push(l); lojasConfig[l].supervisor = supLogin; }
+        }
+    }
+    return lojas.sort((a,b) => a.localeCompare(b, undefined, {numeric: true, sensitivity: 'base'}));
+}
+
+function renderizarModalEquipe() {
+    if(!supervisorGerenciadoAtual) return;
+    let divPromotores = document.getElementById('lista-modal-promotores'); let divLojas = document.getElementById('lista-modal-lojas'); let selLoja = document.getElementById('modal-select-loja'); let lojasDaRegiao = getLojasDaRegiao(supervisorGerenciadoAtual); 
+    let promotoresArray = [];
+    for(let k in bancoUsuarios) { if(bancoUsuarios[k].cargo === "promotor" && (bancoUsuarios[k].criadoPor === supervisorGerenciadoAtual || usuarioLogado.id === "master")) { promotoresArray.push({ login: k, nome: bancoUsuarios[k].nome || k, obj: bancoUsuarios[k] }); } }
+    promotoresArray.sort((a, b) => a.nome.localeCompare(b.nome));
+
+    let htmlPromotores = "";
+    promotoresArray.forEach(p => {
+        let u = p.obj; let k = p.login;
+        htmlPromotores += `<div class="item-modal-busca-promotor" style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 15px; margin-bottom: 10px; text-align: left;"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;"><strong style="font-size:15px;"><i data-lucide="user" class="lucide-sm"></i> ${u.nome || k} (@${k})</strong><div style="display:flex; gap:8px;"><button class="btn-editar" style="background:#f59e0b; color:#fff;" onclick="adminAbrirModalSenha('${k}')"><i data-lucide="key" class="lucide-sm"></i></button><button class="btn-editar" style="background:var(--primary); color:white;" onclick="adminAbrirModalNome('${k}')"><i data-lucide="edit-3" class="lucide-sm"></i></button><button class="btn-editar" style="background:#8b5cf6; color:white;" onclick="adminAbrirModalPermissoes('${k}')"><i data-lucide="shield" class="lucide-sm"></i></button><button class="btn-excluir" onclick="adminRemoverUsuarioModalEquipe('${k}')"><i data-lucide="trash-2" class="lucide-sm"></i></button></div></div><div style="font-size:13px; color:var(--cor-secundaria); display:flex; justify-content:space-between;"><span>Meta Padrão: <strong>${u.meta || 0}</strong> <button class="btn-editar-meta" onclick="adminAbrirModalMeta('${k}')"><i data-lucide="target" class="lucide-sm"></i></button></span><span>Lojas: <strong>${u.lojasPermitidas ? u.lojasPermitidas.length : 0}</strong> <button class="btn-editar" onclick="adminAbrirModalLojas('${k}')"><i data-lucide="store" class="lucide-sm"></i></button></span></div></div>`;
+    });
+    divPromotores.innerHTML = htmlPromotores || "<p style='font-size:13px; color:var(--cor-secundaria);'>Nenhum promotor cadastrado.</p>";
+
+    let htmlLojas = ""; let htmlSelLoja = "";
+    lojasDaRegiao.forEach(loja => {
+        let objL = lojasConfig[loja] || { vendedores: [], capa: 0 }; htmlSelLoja += `<option value="${loja}">${loja}</option>`;
+        let vends = (objL.vendedores || []).map(v => `<span style="background:var(--bg-item); color:var(--primary); padding:4px 8px; border-radius:6px; font-size:11px; margin-right:6px; border:1px solid var(--primary); display:inline-flex; align-items:center; gap:4px; margin-bottom:4px;">${v} <i data-lucide="x" class="lucide-sm" style="cursor:pointer;" onclick="adminRemoverVendedor('${loja}', '${v}')"></i></span>`).join("");
+        htmlLojas += `<div class="item-modal-busca-loja" style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 15px; margin-bottom: 10px; text-align: left;"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;"><strong style="font-size:15px;"><i data-lucide="store" class="lucide-sm"></i> ${loja}</strong><div style="display:flex; gap:8px;"><button class="btn-editar-meta" onclick="adminAbrirModalCapa('${loja}')"><i data-lucide="layers" class="lucide-sm"></i> Capa: ${objL.capa || 0}</button><button class="btn-excluir" onclick="adminRemoverLoja('${loja}')"><i data-lucide="trash-2" class="lucide-sm"></i></button></div></div><div style="font-size:13px; color:var(--cor-secundaria); margin-top:5px; line-height:1.6;">Vendedores: <br>${vends || 'Nenhum'}</div></div>`;
+    });
+    divLojas.innerHTML = htmlLojas || "<p style='font-size:13px; color:var(--cor-secundaria);'>Nenhuma loja na região.</p>"; selLoja.innerHTML = htmlSelLoja;
+    
+    let divCheckboxLojas = document.getElementById('modal-promotor-lojas');
+    let htmlCheckLojas = lojasDaRegiao.map(l => `<label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" class="check-nova-loja" value="${l}"> ${l}</label>`).join("");
+    divCheckboxLojas.innerHTML = htmlCheckLojas || "<i style='font-size:11px;'>Crie lojas primeiro.</i>"; loadIcons();
+}
+
+function adminAddPromotorEquipe() {
+    let login = document.getElementById('modal-promotor-login').value.trim().toLowerCase();
+    let nome = document.getElementById('modal-promotor-nome').value.trim();
+    let senha = document.getElementById('modal-promotor-senha').value.trim();
+    let meta = parseInt(document.getElementById('modal-promotor-meta').value) || 0;
+    if(!login || !nome || !senha) return mostrarToast("Preencha login, nome e senha obrigatórios", "alerta");
+    if(bancoUsuarios[login]) return mostrarToast("Este login já existe no sistema", "erro");
+    let lojasSelecionadas = Array.from(document.querySelectorAll('.check-nova-loja:checked')).map(cb => cb.value);
+    bancoUsuarios[login] = { nome: nome, senha: senha, cargo: "promotor", meta: meta, criadoPor: supervisorGerenciadoAtual, lojasPermitidas: lojasSelecionadas, permissoes: { vendas: document.getElementById('perm-vendas').checked, acomp: document.getElementById('perm-acomp').checked, estoque_ver: document.getElementById('perm-est-ver').checked, estoque_editar: document.getElementById('perm-est-edit').checked } };
+    document.getElementById('modal-promotor-login').value = ""; document.getElementById('modal-promotor-nome').value = ""; document.getElementById('modal-promotor-senha').value = ""; document.getElementById('modal-promotor-meta').value = "";
+    renderizarModalEquipe(); mostrarToast("Promotor criado! Lembre-se de clicar em SALVAR no topo.", "sucesso");
+}
+
+function adminAddGestorSup() {
+    let login = document.getElementById('admin-gs-login').value.trim().toLowerCase();
+    let nome = document.getElementById('admin-gs-nome').value.trim();
+    let senha = document.getElementById('admin-gs-senha').value.trim();
+    let cargo = document.getElementById('admin-gs-cargo').value;
+    let regiaoSel = document.getElementById('admin-gs-regiao-select').value;
+    let regiaoNova = document.getElementById('admin-gs-regiao-input').value.trim().toUpperCase();
+    let regiaoFinal = regiaoSel === 'NOVA' ? regiaoNova : regiaoSel;
+    if(!login || !nome || !senha) return mostrarToast("Preencha login, nome e senha!", "alerta");
+    if(bancoUsuarios[login]) return mostrarToast("Este login já existe!", "erro");
+    if(cargo !== 'gestor' && !regiaoFinal) return mostrarToast("Defina a região da equipe!", "alerta");
+    bancoUsuarios[login] = { nome: nome, senha: senha, cargo: cargo, regiao: cargo === 'gestor' ? 'GLOBAL' : regiaoFinal, criadoPor: usuarioLogado.id, meta: 0 };
+    document.getElementById('admin-gs-login').value = ""; document.getElementById('admin-gs-nome').value = ""; document.getElementById('admin-gs-senha').value = ""; if(document.getElementById('admin-gs-regiao-input')) document.getElementById('admin-gs-regiao-input').value = "";
+    renderizarAdminUsuarios(); mostrarToast(cargo.toUpperCase() + " criado com sucesso! Clique em SALVAR no topo.", "sucesso");
+}
+
+function adminAddLojaEquipe() { let nome = document.getElementById('modal-loja-nome').value.trim(); let capa = parseInt(document.getElementById('modal-loja-capa').value) || 0; if(!nome) return mostrarToast("Preencha o nome da loja", "alerta"); if(lojasConfig[nome]) return mostrarToast("Loja já existe", "erro"); lojasConfig[nome] = { supervisor: supervisorGerenciadoAtual, capa: capa, vendedores: [] }; document.getElementById('modal-loja-nome').value = ""; document.getElementById('modal-loja-capa').value = ""; renderizarModalEquipe(); mostrarToast("Loja criada. Clique em 'Salvar'.", "info"); }
+function adminAddVendedorEquipe() { let loja = document.getElementById('modal-select-loja').value; let nomes = document.getElementById('modal-vendedor-nome').value.trim(); if(!loja) return mostrarToast("Selecione uma loja", "alerta"); if(!nomes) return mostrarToast("Preencha o nome do vendedor", "alerta"); if(!lojasConfig[loja]) lojasConfig[loja] = { supervisor: supervisorGerenciadoAtual, capa: 0, vendedores: [] }; if(!lojasConfig[loja].vendedores) lojasConfig[loja].vendedores = []; let arrayNomes = nomes.split(',').map(n => n.trim()).filter(n => n !== ""); arrayNomes.forEach(n => { if(!lojasConfig[loja].vendedores.includes(n)) lojasConfig[loja].vendedores.push(n); }); document.getElementById('modal-vendedor-nome').value = ""; renderizarModalEquipe(); mostrarToast("Vendedor vinculado. Clique em 'Salvar'.", "info"); }
+function adminRemoverUsuarioModalEquipe(login) { if(confirm("Excluir promotor?")) { delete bancoUsuarios[login]; renderizarModalEquipe(); mostrarToast("Promotor removido.", "info"); } }
+function adminRemoverLoja(loja) { if(confirm("Excluir loja?")) { delete lojasConfig[loja]; for(let k in bancoUsuarios) { if(bancoUsuarios[k].lojasPermitidas) bancoUsuarios[k].lojasPermitidas = bancoUsuarios[k].lojasPermitidas.filter(l => l !== loja); } renderizarModalEquipe(); mostrarToast("Loja removida.", "info"); } }
+function adminRemoverVendedor(loja, vend) { lojasConfig[loja].vendedores = lojasConfig[loja].vendedores.filter(v => v !== vend); renderizarModalEquipe(); mostrarToast("Vendedor removido.", "info"); }
+function adminRemoverUsuario(login) { if(confirm(`Excluir usuário ${login}?`)) { delete bancoUsuarios[login]; renderizarAdminUsuarios(); mostrarToast("Usuário excluído. Clique em 'Salvar'.", "info"); } }
+
+function renderizarAdminAparelhos() {
+    let div = document.getElementById('lista-admin-aparelhos'); let html = "";
+    for(let ap in mapaEmojis) { html += `<div style="display:flex; justify-content:space-between; align-items:center; padding:12px; border-bottom:1px solid var(--border-color); font-size:15px; color:var(--cor-texto);"><span><span style="font-size: 20px; margin-right: 8px;">${mapaEmojis[ap]}</span> ${ap.toUpperCase()}</span><button class="btn-excluir" onclick="removerAparelhoGlobal('${ap}')"><i data-lucide="trash-2" class="lucide-sm"></i> Excluir</button></div>`; }
+    div.innerHTML = html || "<p style='color:var(--cor-secundaria); font-size:13px;'>Nenhum aparelho cadastrado.</p>"; loadIcons();
+}
+
+function removerAparelhoGlobal(ap) { delete mapaEmojis[ap]; renderizarAdminAparelhos(); mostrarToast("Aparelho excluído. Clique em 'Salvar'.", "info"); }
+
+function adminAddAparelho() {
+    let n = document.getElementById('admin-aparelho-nome').value.trim().toLowerCase(); let e = document.getElementById('admin-aparelho-emoji').value.trim();
+    if(!n || !e) return mostrarToast("Preencha Nome e Emoji", "alerta"); if(mapaEmojis[n]) return mostrarToast("Aparelho já existe", "erro");
+    mapaEmojis[n] = e; document.getElementById('admin-aparelho-nome').value = ""; document.getElementById('admin-aparelho-emoji').value = ""; renderizarAdminAparelhos(); mostrarToast("Aparelho adicionado. Clique em 'Salvar'.", "info");
+}
+
+function renderizarInputsFoco() {
+    const container = document.getElementById('admin-foco-container'); const selSup = document.getElementById('seletor-foco-sup'); 
+    if (!container || !selSup) return;
+    let supId = selSup.value; let premiumSup = aparelhosPremium[supId] || aparelhosPremium["geral"] || {}; let taxaSup = taxasCoparticipacao[supId] || taxasCoparticipacao["geral"] || 25; let vComissaoSup = valoresComissao[supId] || valoresComissao["geral"] || {}; 
+    let grupos = vComissaoSup.grupos || []; let aparelhosCfg = vComissaoSup.aparelhos || {}; let campanhasAtivas = vComissaoSup.campanhasPersonalizadas || [];
+    let marcasConcorrentes = vComissaoSup.marcas_concorrentes || ["Samsung", "Motorola", "Outros"];
+
+    document.getElementById('input-taxa-copart').value = taxaSup;
+
+    let htmlGrupos = '<div style="background: var(--bg-item); padding: 20px; border-radius: 16px; border: 1px solid var(--border-color); margin-top: 20px; text-align: left;"><div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;"><span style="font-size: 15px; font-weight: bold; color: #8b5cf6;"><i data-lucide="layers" class="lucide-sm"></i> Categorias de Comissionamento</span><button class="btn-acao btn-enviar" style="padding: 8px 14px; font-size: 12px; width: auto; background: #8b5cf6;" onclick="adminAddGrupo()"><i data-lucide="plus"></i> Nova Categoria</button></div>';
+    if(grupos.length === 0) htmlGrupos += '<span style="font-size:12px; color:var(--cor-secundaria);">Crie categorias para somar o volume de vendas.</span>';
+    grupos.forEach((g) => {
+        htmlGrupos += `<div class="bloco-grupo" data-id="${g.id}" style="background:var(--bg-container); padding:15px; border-radius:12px; border: 1px solid var(--border-color); margin-bottom:12px;"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;"><input type="text" class="grupo-nome" value="${g.nome}" style="font-weight:bold; color:var(--primary); width:180px; margin:0; padding:8px; border-color:var(--primary);" onchange="adminEditGrupoNome('${g.id}', this.value)"><div style="display:flex; gap:8px;"><button class="btn-editar" style="font-size:11px; padding:6px 10px;" onclick="adminAddNivelGrupo('${g.id}')">+ Nível</button><button class="btn-excluir" style="padding:6px 10px;" onclick="adminRemoverGrupo('${g.id}')"><i data-lucide="trash-2" class="lucide-sm" style="margin:0;"></i></button></div></div>`;
+        g.niveis.forEach((nv, nIdx) => { htmlGrupos += `<div style="display:flex; align-items:center; gap:10px; margin-bottom:8px; font-size:13px; background:var(--bg-item); padding:8px 12px; border-radius:8px; border: 1px dashed var(--border-color);"><span>Nível ${nIdx + 1} - Atingindo</span> <input type="number" value="${nv.meta}" style="width:70px; margin:0; padding:6px; font-weight:bold;" onchange="adminEditGrupoNivel('${g.id}', ${nIdx}, 'meta', this.value)"> <span>unidades.</span><button class="btn-excluir" style="padding:4px 8px; margin-left:auto; font-size:10px;" onclick="adminRemoverNivelGrupo('${g.id}', ${nIdx})"><i data-lucide="x" style="margin:0;"></i></button></div>`; });
+        htmlGrupos += `</div>`;
+    });
+    htmlGrupos += '</div>';
+
+    let htmlCampanhas = '<div style="background: var(--bg-item); padding: 20px; border-radius: 16px; border: 1px solid var(--border-color); margin-top: 20px; text-align: left;"><div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;"><span style="font-size: 14px; font-weight: bold; color: #f59e0b;"><i data-lucide="gift" class="lucide-sm"></i> Campanhas Extra</span><button class="btn-acao btn-enviar" style="background-color: #f59e0b; padding: 8px 14px; font-size: 12px; width: auto;" onclick="adicionarLinhaCampanha()"><i data-lucide="plus"></i> Nova Regra</button></div><div id="container-linhas-campanhas" style="display: flex; flex-direction: column; gap: 12px;">';
+    if (campanhasAtivas.length === 0) { htmlCampanhas += '<span style="font-size: 13px; color: var(--cor-secundaria); font-style: italic;">Nenhuma campanha ativa.</span>'; }
+    campanhasAtivas.forEach((camp, index) => {
+        let optionsAparelhos = '<option value="todos">Qualquer Aparelho</option>'; for (let ap in mapaEmojis) { let sel = camp.aparelho === ap ? "selected" : ""; optionsAparelhos += `<option value="${ap}" ${sel}>${mapaEmojis[ap]} ${ap.toUpperCase()}</option>`; }
+        let optionsPromotores = '<option value="todos">Toda a Equipe</option>'; for (let pk in bancoUsuarios) { if (bancoUsuarios[pk].cargo === "promotor" && (supId === 'geral' || bancoUsuarios[pk].criadoPor === supId)) { let selP = (camp.promotorAlvo === pk) ? "selected" : ""; optionsPromotores += `<option value="${pk}" ${selP}>👤 ${bancoUsuarios[pk].nome || pk}</option>`; } }
+        htmlCampanhas += `<div class="linha-campanha-dinamica" style="background: var(--bg-container); padding: 15px; border-radius: 12px; border: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 10px;"><div style="display: flex; gap: 10px; flex-wrap: wrap;"><select class="camp-aparelho" style="margin-bottom:0; padding:10px; flex:1;" onchange="atualizarListaPremiumGlobal()">${optionsAparelhos}</select><select class="camp-promotor" style="margin-bottom:0; padding:10px; flex:1;" onchange="atualizarListaPremiumGlobal()">${optionsPromotores}</select><button class="btn-excluir" style="padding: 10px;" onclick="removerLinhaCampanha(${index})"><i data-lucide="trash-2" style="margin:0;"></i></button></div><div style="display: flex; gap: 10px; flex-wrap: wrap;"><div style="display: flex; align-items:center; gap:6px; flex:1;"><span style="font-size:11px;">Qtd Min.</span><input type="number" class="camp-qtd" value="${camp.qtdMinima || 1}" style="margin-bottom:0; padding:10px;" onchange="atualizarListaPremiumGlobal()"></div><div style="display: flex; align-items:center; gap:6px; flex:1;"><span style="font-size:11px;">Bônus(R$)</span><input type="number" class="camp-valor" value="${camp.bonus || 0}" style="margin-bottom:0; padding:10px;" onchange="atualizarListaPremiumGlobal()"></div></div></div>`;
+    }); 
+    htmlCampanhas += '</div></div>';
+
+    let htmlMarcas = `<div style="background: var(--bg-item); padding: 20px; border-radius: 16px; border: 1px solid var(--border-color); margin-top: 20px; text-align: left;"><div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;"><span style="font-size: 14px; font-weight: bold; color: #3b82f6;"><i data-lucide="pie-chart" class="lucide-sm"></i> Marcas da Concorrência</span><button class="btn-acao btn-enviar" style="background-color: #3b82f6; padding: 8px 14px; font-size: 12px; width: auto;" onclick="adminAddMarcaConcorrente()"><i data-lucide="plus"></i> Nova Marca</button></div><div style="display: flex; gap: 8px; flex-wrap: wrap;">`;
+    marcasConcorrentes.forEach((marca, idx) => {
+        htmlMarcas += `<span style="background: var(--bg-container); border: 1px solid var(--border-color); padding: 6px 12px; border-radius: 8px; font-size: 13px; font-weight: bold; display: flex; align-items: center; gap: 8px; color: var(--cor-texto);">${marca} <i data-lucide="x" class="lucide-sm" style="cursor:pointer; color:#ef4444;" onclick="adminRemoverMarcaConcorrente(${idx})"></i></span>`;
+    });
+    htmlMarcas += `</div></div>`;
+
+    let htmlAparelhos = '<div style="font-size: 15px; font-weight: bold; margin: 25px 0 15px 0; text-align: left;"><i data-lucide="smartphone" class="lucide-sm" style="color:var(--primary);"></i> Enquadramento e Valores por Aparelho:</div><div style="display: flex; flex-direction: column; gap: 15px;">';
+    for (let ap in mapaEmojis) {
+        let isFoco = premiumSup[ap] ? "checked": ""; let cfg = aparelhosCfg[ap] || { tipo: 'nenhum' };
+        if (cfg.tipo === undefined) { if (cfg.comissionado === true || cfg.comissionado === 'true') { cfg.tipo = cfg.valorFixo ? 'fixo' : 'nenhum'; } else { cfg.tipo = 'nenhum'; } }
+        let optHtml = `<option value="nenhum" ${cfg.tipo==='nenhum'?'selected':''}>❌ Sem Comissão</option><option value="fixo" ${cfg.tipo==='fixo'?'selected':''}>📌 Valor Fixo (Unitário)</option>`;
+        grupos.forEach(g => { optHtml += `<option value="grupo_${g.id}" ${cfg.tipo==='grupo' && cfg.grupoId===g.id?'selected':''}>📁 Categoria: ${g.nome}</option>`; });
+        htmlAparelhos += `<div style="background: var(--bg-card); padding: 18px; border-radius: 16px; border: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 12px;"><div style="display:flex; justify-content:space-between; align-items:center;"><div style="font-size: 18px; font-weight: 800; display:flex; align-items:center;"><span style="font-size: 24px; margin-right: 10px;">${mapaEmojis[ap]}</span> ${ap.toUpperCase()}</div><label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" class="check-foco-aparelho" value="${ap}" ${isFoco} onchange="atualizarListaPremiumGlobal()" style="width: 18px; height: 18px; margin:0;"><span style="background: var(--primary); color: white; padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight:bold;">Definir como Foco</span></label></div><div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;"><div style="flex:2; min-width:180px;"><span style="font-size:11px; font-weight:bold; color:var(--cor-secundaria); display:block; margin-bottom:4px;">Regra de Pagamento:</span><select class="ap-tipo-regra" data-ap="${ap}" style="margin:0; padding:10px; border-color:var(--primary);" onchange="adminMudarTipoComissaoAp('${ap}', this.value)">${optHtml}</select></div>`;
+        if (cfg.tipo === 'fixo') { htmlAparelhos += `<div style="flex:1; min-width:100px;"><span style="font-size:11px; font-weight:bold; color:var(--cor-secundaria); display:block; margin-bottom:4px;">Valor Fixo (R$):</span><input type="number" class="ap-valor-fixo" data-ap="${ap}" value="${cfg.valorFixo || 0}" style="margin:0; padding:10px;" onchange="atualizarListaPremiumGlobal()"></div>`; } 
+        else if (cfg.tipo === 'grupo') {
+            let grupoEncontrado = grupos.find(x => x.id === cfg.grupoId);
+            if (grupoEncontrado) {
+                htmlAparelhos += `<div style="width: 100%; display: flex; gap: 10px; overflow-x: auto; padding-top: 10px;">`;
+                grupoEncontrado.niveis.forEach((nv, nIdx) => {
+                    let valorNivelAp = (cfg.valores && cfg.valores[nIdx]) ? cfg.valores[nIdx] : 0;
+                    htmlAparelhos += `<div style="flex:1; min-width:110px; background:var(--bg-container); border:1px solid var(--border-color); padding:10px; border-radius:8px;"><span style="font-size:11px; font-weight:bold; color:var(--primary); display:block;">Paga no Nível ${nIdx + 1}:</span><div style="display:flex; align-items:center; gap:4px; margin-top:4px;">R$ <input type="number" class="ap-valor-grupo-nivel" data-ap="${ap}" data-nidx="${nIdx}" value="${valorNivelAp}" style="margin:0; padding:6px; font-weight:bold;" onchange="atualizarListaPremiumGlobal()"></div></div>`;
+                });
+                htmlAparelhos += `</div>`;
+            }
+        }
+        htmlAparelhos += `</div></div>`;
+    }
+    htmlAparelhos += '</div>';
+    container.innerHTML = htmlGrupos + htmlCampanhas + htmlMarcas + htmlAparelhos; loadIcons();
+}
+
+function adminAddGrupo() { let selSup = document.getElementById('seletor-foco-sup').value; if (!valoresComissao[selSup]) valoresComissao[selSup] = {}; if (!valoresComissao[selSup].grupos) valoresComissao[selSup].grupos = []; valoresComissao[selSup].grupos.push({ id: 'g' + Date.now(), nome: 'Nova Categoria', niveis: [{ meta: 1 }] }); renderizarInputsFoco(); atualizarListaPremiumGlobal(); }
+function adminRemoverGrupo(gId) { let selSup = document.getElementById('seletor-foco-sup').value; valoresComissao[selSup].grupos = valoresComissao[selSup].grupos.filter(g => g.id !== gId); if(valoresComissao[selSup].aparelhos) { for (let ap in valoresComissao[selSup].aparelhos) { let cfg = valoresComissao[selSup].aparelhos[ap]; if (cfg.tipo === 'grupo' && cfg.grupoId === gId) { cfg.tipo = 'nenhum'; delete cfg.grupoId; } } } renderizarInputsFoco(); atualizarListaPremiumGlobal(); }
+function adminAddNivelGrupo(gId) { let selSup = document.getElementById('seletor-foco-sup').value; let g = valoresComissao[selSup].grupos.find(x => x.id === gId); if (g) { g.niveis.push({ meta: 10 }); renderizarInputsFoco(); atualizarListaPremiumGlobal(); } }
+function adminRemoverNivelGrupo(gId, nIdx) { let selSup = document.getElementById('seletor-foco-sup').value; let g = valoresComissao[selSup].grupos.find(x => x.id === gId); if (g) { g.niveis.splice(nIdx, 1); renderizarInputsFoco(); atualizarListaPremiumGlobal(); } }
+function adminEditGrupoNome(gId, val) { let selSup = document.getElementById('seletor-foco-sup').value; let g = valoresComissao[selSup].grupos.find(x => x.id === gId); if (g) { g.nome = val; atualizarListaPremiumGlobal(); } }
+function adminEditGrupoNivel(gId, nIdx, field, val) { let selSup = document.getElementById('seletor-foco-sup').value; let g = valoresComissao[selSup].grupos.find(x => x.id === gId); if (g && g.niveis[nIdx]) { g.niveis[nIdx][field] = Number(val); atualizarListaPremiumGlobal(); } }
+function adminMudarTipoComissaoAp(ap, val) { atualizarListaPremiumGlobal(); renderizarInputsFoco(); }
+
+function atualizarListaPremiumGlobal() {
+    let selSup = document.getElementById('seletor-foco-sup').value;
+    let taxaInputs = document.getElementById('input-taxa-copart'); if (taxaInputs) taxasCoparticipacao[selSup] = Number(taxaInputs.value);
+    
+    let pObj = {}; document.querySelectorAll('.check-foco-aparelho').forEach(cb => { if (cb.checked) pObj[cb.value] = 1; }); aparelhosPremium[selSup] = pObj;
+    if (!valoresComissao[selSup]) valoresComissao[selSup] = {};
+    
+    let campanhas = []; document.querySelectorAll('.linha-campanha-dinamica').forEach(bloco => { campanhas.push({ aparelho: bloco.querySelector('.camp-aparelho').value, promotorAlvo: bloco.querySelector('.camp-promotor').value, qtdMinima: Number(bloco.querySelector('.camp-qtd').value), bonus: Number(bloco.querySelector('.camp-valor').value) }); }); valoresComissao[selSup].campanhasPersonalizadas = campanhas;
+    
+    if(!valoresComissao[selSup].aparelhos) valoresComissao[selSup].aparelhos = {};
+    let cfgAp = valoresComissao[selSup].aparelhos;
+
+    document.querySelectorAll('.ap-tipo-regra').forEach(sel => {
+         let ap = sel.getAttribute('data-ap'); let val = sel.value; if (!cfgAp[ap]) cfgAp[ap] = {};
+         if (val === 'nenhum') { cfgAp[ap] = { tipo: 'nenhum' }; } 
+         else if (val === 'fixo') { let inputFixo = document.querySelector(`.ap-valor-fixo[data-ap="${ap}"]`); cfgAp[ap] = { tipo: 'fixo', valorFixo: inputFixo ? Number(inputFixo.value) : 0 }; } 
+         else if (val.startsWith('grupo_')) { 
+              let gId = val.replace('grupo_', ''); cfgAp[ap] = { tipo: 'grupo', grupoId: gId, valores: {} };
+              document.querySelectorAll(`.ap-valor-grupo-nivel[data-ap="${ap}"]`).forEach(inp => { let nIdx = inp.getAttribute('data-nidx'); cfgAp[ap].valores[nIdx] = Number(inp.value); });
+         }
+    });
+}
+
+function adicionarLinhaCampanha() { let selSup = document.getElementById('seletor-foco-sup').value; if (!valoresComissao[selSup]) valoresComissao[selSup] = {}; if (!valoresComissao[selSup].campanhasPersonalizadas) valoresComissao[selSup].campanhasPersonalizadas = []; valoresComissao[selSup].campanhasPersonalizadas.push({ aparelho: 'todos', promotorAlvo: 'todos', qtdMinima: 1, bonus: 50 }); renderizarInputsFoco(); }
+function removerLinhaCampanha(index) { let selSup = document.getElementById('seletor-foco-sup').value; if (valoresComissao[selSup] && valoresComissao[selSup].campanhasPersonalizadas) { valoresComissao[selSup].campanhasPersonalizadas.splice(index, 1); renderizarInputsFoco(); atualizarListaPremiumGlobal(); } }
+
+function fecharModalEdicao() { document.getElementById('modal-edicao').classList.remove('ativo'); }
+
+function adminAbrirModalSenha(login) { document.getElementById('modal-edicao-titulo').innerHTML = `<i data-lucide="key"></i> Senha (@${login})`; document.getElementById('modal-edicao-corpo').innerHTML = `<input type="text" id="input-edit-senha" value="${bancoUsuarios[login].senha}" placeholder="Nova Senha">`; let btn = document.getElementById('btn-salvar-edicao'); btn.onclick = function() { let val = document.getElementById('input-edit-senha').value.trim(); if(val) { bancoUsuarios[login].senha = val; mostrarToast("Senha alterada!", "sucesso"); fecharModalEdicao(); renderizarAdminUsuarios(); if (document.getElementById('modal-gerenciar-equipe').classList.contains('ativa')) renderizarModalEquipe(); } }; document.getElementById('modal-edicao').classList.add('ativo'); loadIcons(); }
+function adminAbrirModalNome(login) { document.getElementById('modal-edicao-titulo').innerHTML = `<i data-lucide="edit-3"></i> Nome (@${login})`; document.getElementById('modal-edicao-corpo').innerHTML = `<input type="text" id="input-edit-nome" value="${bancoUsuarios[login].nome || login}" placeholder="Nome Completo">`; let btn = document.getElementById('btn-salvar-edicao'); btn.onclick = function() { let val = document.getElementById('input-edit-nome').value.trim(); if(val) { bancoUsuarios[login].nome = val; mostrarToast("Nome alterada!", "sucesso"); fecharModalEdicao(); renderizarAdminUsuarios(); if (document.getElementById('modal-gerenciar-equipe').classList.contains('ativa')) renderizarModalEquipe(); } }; document.getElementById('modal-edicao').classList.add('ativo'); loadIcons(); }
+function adminAbrirModalRegiao(login) { document.getElementById('modal-edicao-titulo').innerHTML = `<i data-lucide="globe"></i> Região (@${login})`; document.getElementById('modal-edicao-corpo').innerHTML = `<input type="text" id="input-edit-regiao" value="${bancoUsuarios[login].regiao || ''}" placeholder="Nome da Região">`; let btn = document.getElementById('btn-salvar-edicao'); btn.onclick = function() { let val = document.getElementById('input-edit-regiao').value.trim().toUpperCase(); if(val) { bancoUsuarios[login].regiao = val; mostrarToast("Região alterada!", "sucesso"); fecharModalEdicao(); renderizarAdminUsuarios(); } }; document.getElementById('modal-edicao').classList.add('ativo'); loadIcons(); }
+function adminAbrirModalMeta(login) { document.getElementById('modal-edicao-titulo').innerHTML = `<i data-lucide="target"></i> Meta (@${login})`; document.getElementById('modal-edicao-corpo').innerHTML = `<input type="number" id="input-edit-meta" value="${bancoUsuarios[login].meta || 0}" placeholder="Meta Mensal">`; let btn = document.getElementById('btn-salvar-edicao'); btn.onclick = function() { let val = parseInt(document.getElementById('input-edit-meta').value) || 0; bancoUsuarios[login].meta = val; mostrarToast("Meta alterada!", "sucesso"); fecharModalEdicao(); if (document.getElementById('modal-gerenciar-equipe').classList.contains('ativa')) renderizarModalEquipe(); }; document.getElementById('modal-edicao').classList.add('ativo'); loadIcons(); }
+function adminAbrirModalCapa(loja) { document.getElementById('modal-edicao-titulo').innerHTML = `<i data-lucide="layers"></i> Capa (${loja})`; document.getElementById('modal-edicao-corpo').innerHTML = `<input type="number" id="input-edit-capa" value="${lojasConfig[loja].capa || 0}" placeholder="Capa da Loja">`; let btn = document.getElementById('btn-salvar-edicao'); btn.onclick = function() { let val = parseInt(document.getElementById('input-edit-capa').value) || 0; lojasConfig[loja].capa = val; mostrarToast("Capa alterada!", "sucesso"); fecharModalEdicao(); if (document.getElementById('modal-gerenciar-equipe').classList.contains('ativa')) renderizarModalEquipe(); }; document.getElementById('modal-edicao').classList.add('ativo'); loadIcons(); }
+function adminAbrirModalPermissoes(login) { let p = bancoUsuarios[login].permissoes || { vendas: true, acomp: true, estoque_ver: true, estoque_editar: true }; document.getElementById('modal-edicao-titulo').innerHTML = `<i data-lucide="shield"></i> Permissões (@${login})`; let html = `<div style="display:flex; flex-direction:column; gap:10px; font-size: 14px; color: var(--cor-texto);">`; html += `<label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="edit-p-vendas" ${p.vendas ? 'checked':''}> Lançar Vendas</label>`; html += `<label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="edit-p-acomp" ${p.acomp ? 'checked':''}> Acompanhamento</label>`; html += `<label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="edit-p-est-ver" ${p.estoque_ver ? 'checked':''}> Ver Estoque</label>`; html += `<label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="edit-p-est-edit" ${p.estoque_editar ? 'checked':''}> Editar Estoque</label></div>`; document.getElementById('modal-edicao-corpo').innerHTML = html; let btn = document.getElementById('btn-salvar-edicao'); btn.onclick = function() { bancoUsuarios[login].permissoes = { vendas: document.getElementById('edit-p-vendas').checked, acomp: document.getElementById('edit-p-acomp').checked, estoque_ver: document.getElementById('edit-p-est-ver').checked, estoque_editar: document.getElementById('edit-p-est-edit').checked }; mostrarToast("Permissões atualizadas!", "sucesso"); fecharModalEdicao(); }; document.getElementById('modal-edicao').classList.add('ativo'); loadIcons(); }
+
+function adminAbrirModalLojas(login) { 
+    document.getElementById('modal-edicao-titulo').innerHTML = `<i data-lucide="store"></i> Lojas (@${login})`; 
+    let permitidas = bancoUsuarios[login].lojasPermitidas || []; 
+    let supLojas = getLojasDaRegiao(bancoUsuarios[login].criadoPor || usuarioLogado.id); 
+    if (usuarioLogado.id === "master" || usuarioLogado.cargo === "gestor") { supLojas = Object.keys(lojasConfig); } 
+    let html = '<div style="display:flex; flex-direction:column; gap:8px; max-height:200px; overflow-y:auto; text-align:left; color: var(--cor-texto); font-size:14px;">'; 
+    supLojas.forEach(l => { 
+        let checked = permitidas.includes(l) ? 'checked' : ''; 
+        html += `<label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" class="edit-loja-check" value="${l}" ${checked}> ${l}</label>`; 
+    }); 
+    html += '</div>'; 
+    if(supLojas.length === 0) html = "<p style='font-size:13px; color:var(--cor-secundaria);'>Nenhuma loja disponível.</p>"; 
+    document.getElementById('modal-edicao-corpo').innerHTML = html; 
+    
+    let btn = document.getElementById('btn-salvar-edicao'); 
+    btn.onclick = function() { 
+        let selecionadas = Array.from(document.querySelectorAll('.edit-loja-check:checked')).map(cb => cb.value); 
+        bancoUsuarios[login].lojasPermitidas = selecionadas; 
+        mostrarToast("Lojas atualizadas!", "sucesso"); 
+        fecharModalEdicao(); 
+        if (document.getElementById('modal-gerenciar-equipe').classList.contains('ativa')) renderizarModalEquipe(); 
+    }; 
+    document.getElementById('modal-edicao').classList.add('ativo'); 
+    loadIcons(); 
+}
+
+window.adminAddMarcaConcorrente = function() { document.getElementById('input-nova-marca').value = ""; document.getElementById('modal-nova-marca').classList.add('ativo'); loadIcons(); };
+window.fecharModalNovaMarca = function() { document.getElementById('modal-nova-marca').classList.remove('ativo'); };
+
+window.confirmarNovaMarca = function() {
+    let selSup = document.getElementById('seletor-foco-sup').value;
+    let novaMarca = document.getElementById('input-nova-marca').value.trim();
+    if (!novaMarca) return mostrarToast("Digite o nome da marca.", "alerta");
+    if (!valoresComissao[selSup]) valoresComissao[selSup] = {};
+    if (!valoresComissao[selSup].marcas_concorrentes) valoresComissao[selSup].marcas_concorrentes = ["Samsung", "Motorola", "Outros"];
+    valoresComissao[selSup].marcas_concorrentes.push(novaMarca);
+    if (typeof renderizarInputsFoco === "function") renderizarInputsFoco();
+    if (typeof atualizarListaPremiumGlobal === "function") atualizarListaPremiumGlobal();
+    mostrarToast("Marca adicionada! Clique em 'Salvar' no topo.", "sucesso");
+    fecharModalNovaMarca();
+};
+
+window.adminRemoverMarcaConcorrente = function(idx) {
+    let selSup = document.getElementById('seletor-foco-sup').value;
+    if (valoresComissao[selSup] && valoresComissao[selSup].marcas_concorrentes) {
+        valoresComissao[selSup].marcas_concorrentes.splice(idx, 1);
+        if (typeof renderizarInputsFoco === "function") renderizarInputsFoco();
+        if (typeof atualizarListaPremiumGlobal === "function") atualizarListaPremiumGlobal();
+    }
+};
+
+async function abrirBatalha() {
+    mudarTela('tela-batalha');
+    const grid = document.getElementById('grid-batalha-aparelhos');
+    if (!grid) return; 
+    let html = "";
+    for (let ap in mapaEmojis) {
+        html += `<div class="item-aparelho" onclick="carregarCardTatico('${ap}')" style="cursor: pointer;"><div class="card-aparelho" style="width: 75px; height: 75px;"><span class="emoji-card" style="font-size: 32px;">${mapaEmojis[ap]}</span></div><span class="nome-card" style="font-size: 11px;">${ap.toUpperCase()}</span></div>`;
+    }
+    grid.innerHTML = html || "<div class='mensagem-vazia'>Nenhum aparelho cadastrado.</div>";
+    document.getElementById('card-tatico-detalhe').style.display = "none";
+    loadIcons();
+}
+
+async function carregarCardTatico(aparelhoNome) {
+    mostrarToast(`Buscando táticas para ${aparelhoNome.toUpperCase()}...`, "info");
+    let supId = usuarioLogado.criadoPor || "geral";
+    if (usuarioLogado.cargo === "supervisor") supId = usuarioLogado.id;
+    if (usuarioLogado.cargo === "gestor" || usuarioLogado.id === "master") supId = "geral";
+    
+    try {
+        const { data } = await supabaseClient.from('catalogo_batalha').select('*').eq('supervisor_login', supId).eq('aparelho_chave', aparelhoNome.toLowerCase()).single();
+        let argumentos = "Nenhum argumento cadastrado pelo supervisor para este aparelho ainda.";
+        let contra = "Nenhum contra-ataque cadastrado.";
+        let pdfUrl = "";
+        
+        if (data) { argumentos = data.argumentos || argumentos; contra = data.contra_ataque || contra; pdfUrl = data.pdf_url || ""; }
+        
+        document.getElementById('batalha-titulo-aparelho').innerHTML = `${mapaEmojis[aparelhoNome] || ''} ${aparelhoNome.toUpperCase()}`;
+        document.getElementById('batalha-texto-argumentos').innerText = argumentos;
+        document.getElementById('batalha-texto-contra').innerText = contra;
+        
+        let containerPdf = document.getElementById('container-pdf-batalha');
+        if (pdfUrl) { document.getElementById('link-pdf-batalha').href = pdfUrl; containerPdf.style.display = "block"; } else { containerPdf.style.display = "none"; }
+        
+        document.getElementById('card-tatico-detalhe').style.display = "block";
+        loadIcons();
+    } catch (e) {
+        console.error("Erro ao carregar card tático:", e);
+        document.getElementById('batalha-titulo-aparelho').innerHTML = `${mapaEmojis[aparelhoNome] || ''} ${aparelhoNome.toUpperCase()}`;
+        document.getElementById('batalha-texto-argumentos').innerText = "Cadastre os argumentos na aba Ajustes.";
+        document.getElementById('batalha-texto-contra').innerText = "Cadastre os contra-ataques na aba Ajustes.";
+        document.getElementById('container-pdf-batalha').style.display = "none";
+        document.getElementById('card-tatico-detalhe').style.display = "block";
+        loadIcons();
+    }
+}
+
+function abrirModalFechamento() {
+    let selLoja = document.getElementById('select-loja-share');
+    let htmlLojas = ''; let lojas = [];
+    
+    if (usuarioLogado.cargo === "promotor") {
+        lojas = usuarioLogado.lojasPermitidas || [];
+        if (typeof lojas === 'string') { try { lojas = JSON.parse(lojas); } catch(e) { lojas = [lojas]; } }
+    } else if (usuarioLogado.cargo === "supervisor" && typeof getLojasDaRegiao === "function") { lojas = getLojasDaRegiao(usuarioLogado.id); } 
+    else { lojas = Object.keys(lojasConfig); }
+
+    if (!lojas || lojas.length === 0) return mostrarToast("Nenhuma loja encontrada na sua região.", "alerta");
+    
+    lojas.sort().forEach(l => { let nomePromotor = getPromotorDaLoja(l); htmlLojas += `<option value="${l}">${l} (👤 ${nomePromotor})</option>`; });
+    selLoja.innerHTML = htmlLojas;
+
+    let supId = usuarioLogado.criadoPor || "geral";
+    if (usuarioLogado.cargo === "supervisor") supId = usuarioLogado.id;
+    let vComissao = valoresComissao[supId] || valoresComissao["geral"] || {};
+    let marcas = vComissao.marcas_concorrentes || ["Samsung", "Motorola", "Outros"];
+    
+    let containerMarcas = document.getElementById('container-inputs-concorrencia');
+    let htmlInputs = "";
+    marcas.forEach((marca, idx) => { htmlInputs += `<div><span style="font-size: 11px; font-weight: bold; color: var(--cor-secundaria);">${marca}</span><input type="number" id="input-concorrente-${idx}" data-marca="${marca}" placeholder="Qtd" style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); text-align: center; margin: 0;"></div>`; });
+    if (containerMarcas) containerMarcas.innerHTML = htmlInputs;
+
+    document.getElementById('modal-fechamento-share').classList.add('ativo');
+    loadIcons();
+}
+
+async function enviarFechamentoShare() {
+    if (!navigator.onLine) { mostrarToast("Sem internet!", "erro"); return; }
+    let loja = document.getElementById('select-loja-share').value;
+    if (!loja) return mostrarToast("Selecione uma loja.", "alerta");
+    
+    let totalConcorrencia = 0; let objConcorrentes = {};
+    let inputs = document.querySelectorAll('[id^="input-concorrente-"]');
+    inputs.forEach(inp => {
+        let qtd = parseInt(inp.value) || 0;
+        let marca = inp.getAttribute('data-marca');
+        objConcorrentes[marca] = qtd;
+        totalConcorrencia += qtd;
+    });
+
+    if (totalConcorrencia === 0) return mostrarToast("Preencha as vendas da concorrência.", "alerta");
+
+    const btn = document.getElementById("btn-salvar-share");
+    btn.disabled = true;
+    btn.innerHTML = '<i data-lucide="loader-2" style="animation: spin 1s linear infinite;"></i> Salvando...';
+    loadIcons();
+
+    let payload = {
+        data_fechamento: new Date().toISOString().split('T')[0],
+        loja: loja,
+        promotor_login: usuarioLogado.id,
+        vendas_oppo: 0, 
+        vendas_total_loja: totalConcorrencia, 
+        criado_por_supervisor: usuarioLogado.criadoPor || usuarioLogado.id,
+        concorrentes_dados: objConcorrentes 
+    };
+
+    try {
+        const { error } = await supabaseClient.from('market_share').insert([payload]);
+        if (error) throw error;
+        mostrarToast("Fechamento registrado com sucesso!", "sucesso");
+        document.getElementById('modal-fechamento-share').classList.remove('ativo');
+    } catch (e) {
+        console.error("Erro no Share:", e);
+        mostrarToast("Erro ao registrar fechamento.", "erro");
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = 'Salvar Fechamento';
+        loadIcons();
+    }
 }

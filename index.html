@@ -420,7 +420,10 @@
     
     <!-- CONTROLES GERAIS (Servem para as duas abas) -->
     <div class="controles-topo-acompanhamento" style="margin-bottom: 10px; display: flex; gap: 10px; align-items: center;">
-        <select id="seletor-mes-dash" class="seletor-mes" style="padding: 14px; font-size: 15px; margin-bottom: 0; flex: 1; border-color: var(--primary);" onchange="abrirDashboard(); carregarGraficosShare();"><option value="">Mês Atual</option></select>
+<div style="display: flex; gap: 10px; flex: 1;">
+    <input type="date" id="dash-data-inicio" class="seletor-mes" style="margin-bottom: 0; padding: 14px;" onchange="abrirDashboard(); carregarGraficosShare();">
+    <input type="date" id="dash-data-fim" class="seletor-mes" style="margin-bottom: 0; padding: 14px;" onchange="abrirDashboard(); carregarGraficosShare();">
+</div>
         <button class="btn-sistema" onclick="forcarAtualizacaoDashboard()" style="margin-bottom: 0; width: auto; padding: 14px 18px; border-radius: 12px; background: var(--primary-gradiente);" title="Forçar Atualização"><i data-lucide="refresh-cw" id="icon-refresh-dash" style="margin: 0;"></i></button>
         <button class="btn-sistema" onclick="compartilharDashboard()" style="margin-bottom: 0; width: auto; padding: 14px 18px; border-radius: 12px; background: #8b5cf6;" title="Compartilhar Print"><i data-lucide="camera" style="margin: 0;"></i></button>
     </div>
