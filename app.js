@@ -1,6 +1,6 @@
 // ==========================================
-// app.js - PARTE 1 DE 4 (Corresponde à Parte 2 do envio total)
-// Variáveis Globais, Interface, Motor de Nuvem e Funções Base
+// app.js - PARTE 1 DE 6
+// Variáveis Globais, Interface, Motor de Nuvem e Utilitários
 // ==========================================
 
 let lojaAtual = ""; 
@@ -169,7 +169,34 @@ async function salvarConfiguracoesGlobais(mostrarAviso = true) {
     }
 }
 
-// Utilitários Matemáticos e Lógicos Essenciais
+// ==========================================
+// UTILITÁRIOS MATEMÁTICOS, SKELETON E LÓGICA
+// ==========================================
+
+function gerarSkeletonHtml(qtd) {
+    let html = "";
+    for(let i=0; i<qtd; i++) {
+        html += '<div class="skeleton-card"><div class="skeleton skeleton-title"></div><div class="skeleton skeleton-text"></div><div class="skeleton skeleton-text" style="width: 80%;"></div></div>';
+    }
+    return html;
+}
+
+function calcularDiasUteisRestantes() {
+    let hoje = new Date();
+    let ultimoDia = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
+    let diasUteis = 0;
+    
+    for (let d = hoje.getDate(); d <= ultimoDia.getDate(); d++) {
+        let dataAtual = new Date(hoje.getFullYear(), hoje.getMonth(), d);
+        let diaSemana = dataAtual.getDay();
+        // 0 = Domingo, 6 = Sábado. Considera dias úteis de segunda a sexta.
+        if (diaSemana !== 0 && diaSemana !== 6) {
+            diasUteis++;
+        }
+    }
+    return diasUteis;
+}
+
 function extrairChaveAparelho(textoBruto) { 
     let semImei = textoBruto.split("→")[0].split("(")[0].replace(/\[Motivo:.*?\]/g, "").trim().toLowerCase(); 
     let chavesOrdenadas = Object.keys(mapaEmojis).sort((a, b) => b.length - a.length);
@@ -187,7 +214,8 @@ function ehPremium(textoBruto, supervisorId) {
     return (pSup[chave] === 1 || pSup[chave] === true); 
 }
 // ==========================================
-// app.js - PARTE 3 DE 5: Vendas, Lojas e Envio para Nuvem
+// app.js - PARTE 2 DE 6
+// Vendas, Lojas e Envio para Nuvem (Com trava de estoque)
 // ==========================================
 
 function irParaVendas() {
@@ -339,36 +367,72 @@ async function enviarParaBanco() {
 
     const btn = document.getElementById("btn-enviar-venda");
     btn.disabled = true;
-    btn.innerHTML = '<i data-lucide="loader-2" style="animation: spin 2s linear infinite;"></i> Enviando...';
+    btn.innerHTML = '<i data-lucide="loader-2" style="animation: spin 2s linear infinite;"></i> Validando Estoque...';
     loadIcons();
 
-    let vendasInsert = [];
-    let contagemEstoque = {};
-
+    // 1. Contabiliza a quantidade necessária para esta venda
+    let contagemNecessaria = {};
     pendenciasVendaMultipla.forEach(p => {
         let nomeAparelhoFormatado = `${p.emoji} ${p.aparelho}`;
-        vendasInsert.push({
-            promotor_login: usuarioLogado.id,
-            loja: lojaAtual,
-            vendedor: p.vendedor,
-            aparelhos_vendidos: nomeAparelhoFormatado + (p.imei ? ` → IMEI: ${p.imei}` : ""),
-            data_venda: new Date().toISOString(),
-            status: 'Realizado'
-        });
-        contagemEstoque[nomeAparelhoFormatado] = (contagemEstoque[nomeAparelhoFormatado] || 0) - 1;
+        contagemNecessaria[nomeAparelhoFormatado] = (contagemNecessaria[nomeAparelhoFormatado] || 0) + 1;
     });
 
     try {
+        // 2. VALIDAÇÃO DE ESTOQUE NO BANCO DE DADOS
+        let aparelhosSemEstoque = [];
+        
+        for (let apNome in contagemNecessaria) {
+            const { data: estItem } = await supabaseClient
+                .from('estoque')
+                .select('quantidade')
+                .eq('loja', lojaAtual)
+                .eq('aparelho', apNome)
+                .maybeSingle();
+            
+            let qtdAtual = estItem ? (estItem.quantidade || 0) : 0;
+            let qtdExigida = contagemNecessaria[apNome];
+
+            // Se a quantidade no banco for menor que a exigida na venda, acusa o erro
+            if (qtdAtual < qtdExigida) {
+                aparelhosSemEstoque.push(`• ${apNome} (Estoque: ${qtdAtual} | Vendendo: ${qtdExigida})`);
+            }
+        }
+
+        // 3. SE FALTAR ESTOQUE, ABORTA O ENVIO E MOSTRA O ERRO
+        if (aparelhosSemEstoque.length > 0) {
+            mostrarToast(`ESTOQUE INSUFICIENTE!\nCorrija a auditoria:\n\n${aparelhosSemEstoque.join('\n')}`, "erro");
+            btn.disabled = false;
+            btn.innerHTML = '<i data-lucide="send"></i> Enviar';
+            loadIcons();
+            return; // Aborta completamente a gravação da venda
+        }
+
+        // 4. SE PASSOU NA VALIDAÇÃO, MUDA O BOTÃO E GRAVA A VENDA
+        btn.innerHTML = '<i data-lucide="loader-2" style="animation: spin 2s linear infinite;"></i> Salvando Venda...';
+        loadIcons();
+
+        let vendasInsert = [];
+        pendenciasVendaMultipla.forEach(p => {
+            let nomeAparelhoFormatado = `${p.emoji} ${p.aparelho}`;
+            vendasInsert.push({
+                promotor_login: usuarioLogado.id,
+                loja: lojaAtual,
+                vendedor: p.vendedor,
+                aparelhos_vendidos: nomeAparelhoFormatado + (p.imei ? ` → IMEI: ${p.imei}` : ""),
+                data_venda: new Date().toISOString(),
+                status: 'Realizado'
+            });
+        });
+
         const { error: errV } = await supabaseClient.from('vendas').insert(vendasInsert);
         if (errV) throw errV;
 
-        for (let apNome in contagemEstoque) {
-             const { data: estItem } = await supabaseClient.from('estoque').select('*').eq('loja', lojaAtual).eq('aparelho', apNome).single();
+        // 5. ATUALIZA O ESTOQUE SEGURAMENTE (Subtrai apenas o que foi vendido)
+        for (let apNome in contagemNecessaria) {
+             const { data: estItem } = await supabaseClient.from('estoque').select('*').eq('loja', lojaAtual).eq('aparelho', apNome).maybeSingle();
              if (estItem) {
-                 let novaQtd = (estItem.quantidade || 0) + contagemEstoque[apNome];
+                 let novaQtd = (estItem.quantidade || 0) - contagemNecessaria[apNome];
                  await supabaseClient.from('estoque').update({ quantidade: novaQtd }).eq('id', estItem.id);
-             } else {
-                 await supabaseClient.from('estoque').insert({ loja: lojaAtual, aparelho: apNome, quantidade: contagemEstoque[apNome] });
              }
         }
 
@@ -385,7 +449,8 @@ async function enviarParaBanco() {
     }
 }
 // ==========================================
-// app.js - PARTE 4 DE 5: Acompanhamento e Histórico
+// app.js - PARTE 3 DE 6
+// Acompanhamento (Rankings) e Cancelamentos (Estorno)
 // ==========================================
 
 function abrirAcompanhamento() { 
@@ -539,7 +604,7 @@ async function carregarDadosDoBanco() {
     let btn = document.getElementById("btn-atualizar-acomp");
     if(btn) btn.innerHTML = '<i data-lucide="loader-2" class="lucide-sm" style="animation: spin 2s linear infinite;"></i> Atualizando...';
     loadIcons();
-    if(div) div.innerHTML = "Buscando dados no Supabase...";
+    if(div) div.innerHTML = gerarSkeletonHtml(5);
 
     try {
         const { data, error } = await supabaseClient.from('vendas').select('*').neq('status', 'Cancelado').order('data_venda', { ascending: false });
@@ -562,7 +627,6 @@ async function carregarDadosDoBanco() {
     }
 }
 
-// AQUI ESTÃO AS FUNÇÕES DE ABERTURA DO HISTÓRICO CORRIGIDAS!
 function abrirHistorico(tipo) { 
     tipoHistoricoAtual = tipo; 
     mudarTela('tela-historico'); 
@@ -605,7 +669,7 @@ function mudouSupHistorico() {
 async function carregarHistoricoDoBanco(forcarNuvem = false) {
     const div = document.getElementById("lista-historico");
     if (!forcarNuvem && dadosHistoricoGlobal.length > 0) { renderizarListaHistorico(); return; }
-    div.innerHTML = '<i data-lucide="loader-2" class="lucide-sm" style="animation: spin 2s linear infinite;"></i> Carregando nuvem...';
+    div.innerHTML = gerarSkeletonHtml(5);
     loadIcons();
 
     try {
@@ -653,7 +717,7 @@ async function executarCancelamentoVenda() {
         });
 
         for (let apNome in contagemEstoqueDevolucao) {
-            const { data: estItem } = await supabaseClient.from('estoque').select('*').eq('loja', loja).eq('aparelho', apNome).single();
+            const { data: estItem } = await supabaseClient.from('estoque').select('*').eq('loja', loja).eq('aparelho', apNome).maybeSingle();
             if (estItem) {
                 let novaQtd = (estItem.quantidade || 0) + contagemEstoqueDevolucao[apNome];
                 await supabaseClient.from('estoque').update({ quantidade: novaQtd }).eq('id', estItem.id);
@@ -691,7 +755,7 @@ async function executarDesfazerCancelamento(indexHist) {
         });
 
         for (let apNome in contagemEstoqueRetirada) {
-            const { data: estItem } = await supabaseClient.from('estoque').select('*').eq('loja', loja).eq('aparelho', apNome).single();
+            const { data: estItem } = await supabaseClient.from('estoque').select('*').eq('loja', loja).eq('aparelho', apNome).maybeSingle();
             if (estItem) {
                 let novaQtd = (estItem.quantidade || 0) - contagemEstoqueRetirada[apNome];
                 if(novaQtd < 0) novaQtd = 0;
@@ -732,6 +796,10 @@ function validarECancelarVenda() {
     if (modal) modal.classList.remove('ativo'); 
     executarCancelamentoVenda(); 
 }
+// ==========================================
+// app.js - PARTE 4 DE 6
+// Renderização do Histórico, Filtros de Data e Estoque Completo
+// ==========================================
 
 let limiteHistorico = 50; 
 function aplicarFiltroHistorico() { limiteHistorico = 50; renderizarListaHistorico(); }
@@ -753,7 +821,6 @@ function renderizarListaHistorico() {
     let filtrados = []; 
     dadosHistoricoGlobal.forEach((row, index) => { 
         let isCancelado = row.Status === "Cancelado"; 
-        
         if (ocultarCancelados && isCancelado) return; 
         if (apenasCancelados && row.Tipo !== 'Auditoria' && !isCancelado) return; 
         
@@ -816,23 +883,85 @@ function renderizarListaHistorico() {
         
         if (tipoHistoricoAtual === 'geral' && adminRole && !item.isEstoque) { 
             if (!item.isCancelado) { 
-                btnAcao = `<button onclick="abrirModalCancelarVenda(${item.originalIndex}, '${item.pLogin}')" style="background: transparent; color: #ef4444; border: 1px solid rgba(239,68,68,0.3); padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: bold; cursor: pointer;"><i data-lucide="x-circle" class="lucide-sm"></i> Cancelar</button>`; 
+                btnAcao = `<button onclick="abrirModalCancelarVenda(${item.originalIndex}, '${item.pLogin}')" style="background: transparent; color: #ef4444; border: 1px solid rgba(239,68,68,0.3); padding: 10px 15px; border-radius: 8px; font-size: 13px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 5px;"><i data-lucide="x-circle" class="lucide-sm"></i> Estornar</button>`; 
             } else { 
-                btnAcao = `<button onclick="executarDesfazerCancelamento(${item.originalIndex})" style="background: var(--bg-item); color: #10b981; border: 1px solid rgba(16,185,129,0.3); padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: bold; cursor: pointer;"><i data-lucide="rotate-ccw" class="lucide-sm"></i> Desfazer</button>`; 
+                btnAcao = `<button onclick="executarDesfazerCancelamento(${item.originalIndex})" style="background: var(--bg-item); color: #10b981; border: 1px solid rgba(16,185,129,0.3); padding: 10px 15px; border-radius: 8px; font-size: 13px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 5px;"><i data-lucide="rotate-ccw" class="lucide-sm"></i> Desfazer</button>`; 
             } 
         } 
         
-        html += `<div style="${opacidade} ${bgCard} ${bordaCard} padding: 16px; border-radius: 12px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 8px;">${badgeCancelado}<div style="display: flex; justify-content: space-between; align-items:center;"><span style="font-size:12px; font-weight:bold; color:var(--cor-secundaria);">${dataFormatada}</span><span style="font-size: 13px; font-weight:bold; color:var(--primary);"><i data-lucide="user" class="lucide-sm"></i> ${nomePromotor}</span></div><div style="font-size:14px; ${estiloTexto} display: flex; align-items: flex-start; justify-content: space-between; gap:8px;"><div style="display: flex; align-items: flex-start; gap: 8px;">${icone} <span>${textoDetalheLimpo}</span></div></div><div style="display: flex; justify-content: flex-end; margin-top: 4px;">${btnAcao}</div></div>`; 
+        html += `
+        <div class="swipe-container" style="${opacidade} ${bordaCard}">
+            <div class="swipe-actions">
+                ${btnAcao}
+            </div>
+            <div class="swipe-content" style="${bgCard} padding: 16px; display: flex; flex-direction: column; gap: 8px;">
+                ${badgeCancelado}
+                <div style="display: flex; justify-content: space-between; align-items:center;">
+                    <span style="font-size:12px; font-weight:bold; color:var(--cor-secundaria);">${dataFormatada}</span>
+                    <span style="font-size: 13px; font-weight:bold; color:var(--primary);"><i data-lucide="user" class="lucide-sm"></i> ${nomePromotor}</span>
+                </div>
+                <div style="font-size:14px; ${estiloTexto} display: flex; align-items: flex-start; justify-content: space-between; gap:8px;">
+                    <div style="display: flex; align-items: flex-start; gap: 8px;">${icone} <span>${textoDetalheLimpo}</span></div>
+                </div>
+                <div style="font-size: 10px; color: var(--cor-secundaria); text-align: center; margin-top: 5px; opacity: 0.6; display: ${btnAcao !== '' ? 'block' : 'none'};">
+                    <i data-lucide="chevrons-left" class="lucide-sm"></i> Deslize para a esquerda para ações
+                </div>
+            </div>
+        </div>`;
     }); 
     
-    div.innerHTML = html; loadIcons(); 
+    div.innerHTML = html; 
+    
+    // ATIVANDO O SENSOR DE TOQUE (SWIPE)
+    document.querySelectorAll('.swipe-content').forEach(el => {
+        let startX = 0;
+        el.addEventListener('touchstart', e => { startX = e.touches[0].clientX; }, {passive: true});
+        el.addEventListener('touchmove', e => {
+            let diff = startX - e.touches[0].clientX;
+            if (diff > 40) { el.style.transform = 'translateX(-130px)'; } 
+            else if (diff < -40) { el.style.transform = 'translateX(0)'; } 
+        }, {passive: true});
+    });
+
+    loadIcons(); 
     if (filtrados_total > limiteHistorico) { 
         div.innerHTML += `<button class="btn-sistema" style="margin-top: 15px; background: var(--bg-item); color: var(--primary); border: 1px solid var(--primary);" onclick="limiteHistorico += 50; renderizarListaHistorico();">Carregar mais históricos...</button>`; 
     } 
 }
-// ==========================================
-// app.js - PARTE 5 DE 5: Estoque, Dashboards, Admin e Batalha
-// ==========================================
+
+function setFiltroDataRapido(tipo) {
+    let inputInicio = document.getElementById('filtro-data-inicio-historico');
+    let inputFim = document.getElementById('filtro-data-fim-historico');
+    if (!inputInicio || !inputFim) return;
+    
+    let hoje = new Date();
+    let formatarData = (d) => d.toISOString().split('T')[0];
+    
+    if (tipo === 'hoje') {
+        let strHoje = formatarData(hoje);
+        inputInicio.value = strHoje;
+        inputFim.value = strHoje;
+    } else if (tipo === 'ontem') {
+        let ontem = new Date();
+        ontem.setDate(hoje.getDate() - 1);
+        let strOntem = formatarData(ontem);
+        inputInicio.value = strOntem;
+        inputFim.value = strOntem;
+    } else if (tipo === 'semana') {
+        let inicioSemana = new Date();
+        inicioSemana.setDate(hoje.getDate() - 7);
+        inputInicio.value = formatarData(inicioSemana);
+        inputFim.value = formatarData(hoje);
+    } else if (tipo === 'mes') {
+        let inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+        inputInicio.value = formatarData(inicioMes);
+        inputFim.value = formatarData(hoje);
+    } else if (tipo === 'limpar') {
+        inputInicio.value = "";
+        inputFim.value = "";
+    }
+    aplicarFiltroHistorico();
+}
 
 // ================= MOSTRUÁRIO E ESTOQUE =================
 function fecharModalConfirmMostruario() { document.getElementById('modal-confirm-mostruario').classList.remove('ativo'); mostruarioEmEdicao = null; }
@@ -881,7 +1010,7 @@ async function carregarEstoqueDoBanco() {
     let btn = document.getElementById("btn-atualizar-estoque");
     if(btn) btn.innerHTML = '<i data-lucide="loader-2" style="animation: spin 2s linear infinite;"></i> Atualizando...';
     loadIcons();
-    document.getElementById("lista-estoque-agrupada").innerHTML = "Buscando dados do estoque no Supabase...";
+    document.getElementById("lista-estoque-agrupada").innerHTML = gerarSkeletonHtml(4);
 
     try {
         const { data, error } = await supabaseClient.from('estoque').select('*');
@@ -1113,7 +1242,7 @@ async function executarEnvioEstoque(motivoSelecionado) {
     try {
         for (let i = 0; i < chaves.length; i++) {
             let p = pendenciasEstoque[chaves[i]];
-            const { data: estItem } = await supabaseClient.from('estoque').select('*').eq('loja', p.loja).eq('aparelho', p.aparelho).single();
+            const { data: estItem } = await supabaseClient.from('estoque').select('*').eq('loja', p.loja).eq('aparelho', p.aparelho).maybeSingle();
             
             if (estItem) {
                 await supabaseClient.from('estoque').update({ quantidade: p.novaQtd }).eq('id', estItem.id);
@@ -1121,7 +1250,6 @@ async function executarEnvioEstoque(motivoSelecionado) {
                 await supabaseClient.from('estoque').insert({ loja: p.loja, aparelho: p.aparelho, quantidade: p.novaQtd });
             }
 
-            // CRIA O LOG DE AUDITORIA NO BANCO DE VENDAS
             await supabaseClient.from('vendas').insert([{
                 promotor_login: usuarioLogado.id,
                 loja: p.loja,
@@ -1145,8 +1273,11 @@ async function executarEnvioEstoque(motivoSelecionado) {
     }
 }
 function enviarConferenciaDiaria() { localStorage.setItem('ultimaConferencia_' + usuarioLogado.id, new Date().toLocaleDateString('pt-BR')); document.getElementById('container-btn-conferencia-ok').style.display = "none"; mostrarToast("Conferência confirmada com sucesso!", "sucesso"); }
+// ==========================================
+// app.js - PARTE 5 DE 6
+// Dashboards, Gráficos, Pace e Metas Inteligentes
+// ==========================================
 
-// ================= DASHBOARDS & GRÁFICOS =================
 function forcarAtualizacaoDashboard() { 
     mostrarToast("Buscando dados atualizados...", "info"); 
     let icone = document.getElementById('icon-refresh-dash'); 
@@ -1276,7 +1407,7 @@ function abrirDashboard() {
     }); 
 }
 
-function toggleComissao() { let elComissao = document.getElementById("total-comissao-geral"); let iconeOlho = document.getElementById("icone-olho-comissao"); if (elComissao.innerText === "R$ ****") { elComissao.innerText = elComissao.dataset_valor || "R$ 0,00"; iconeOlho.innerHTML = '<i data-lucide="eye-off" style="margin:0;"></i>'; } else { elComissao.innerText = "R$ ****"; iconeOlho.innerHTML = '<i data-lucide="eye" style="margin:0;"></i>'; } loadIcons(); }
+function toggleComissao() { let elComissao = document.getElementById("total-comissao-geral"); let iconeOlho = document.getElementById("icone-olho-comissao"); if (elComissao.innerText === "R$ ****") { elComissao.innerText = elComissao.dataset.valor || "R$ 0,00"; iconeOlho.innerHTML = '<i data-lucide="eye-off" style="margin:0;"></i>'; } else { elComissao.innerText = "R$ ****"; iconeOlho.innerHTML = '<i data-lucide="eye" style="margin:0;"></i>'; } loadIcons(); }
 function isCampaignActiveInMonth(startStr, endStr, mesSelecionado) { return true; }
 
 function gerarGraficos(dadosVendas) {
@@ -1307,13 +1438,14 @@ function gerarGraficos(dadosVendas) {
     let elLoja = document.getElementById('filtro-loja-dash');
     if (elLoja) lojaFoco = elLoja.value || "todas";
 
-    let agrupamento = (supervisorFoco === "todos") ? "supervisor" : "promotor"; let visualizarVendedores = (promotorFoco !== "todos" || lojaFoco !== "todas"); 
+    let agrupamento = (supervisorFoco === "todos") ? "supervisor" : "promotor"; 
+    let visualizarVendedores = (promotorFoco !== "todos" || lojaFoco !== "todas"); 
     
     if (agrupamento === "supervisor") { 
         for (let k in bancoUsuarios) { 
             if (bancoUsuarios[k].cargo === "supervisor" && podeGerenciar(usuarioLogado, k)) { 
                 let nomeSup = bancoUsuarios[k].nome || k; 
-                metricas[nomeSup] = { login: k, nome: nomeSup, metaPremium: 0, metaIndividual: 0, realizadoPremium: 0, realizadoGeral: 0, modelosPremiumVendidos: {}, modelosVendidosGeral: {}, comissaoAcumulada: 0 }; 
+                metricas[nomeSup] = { login: k, nome: nomeSup, metaPremium: 0, metaIndividual: 0, realizadoPremium: 0, realizadoGeral: 0, modelosPremiumVendidos: {}, modelosVendidosGeral: {}, comissaoAcumulada: 0, metasLinhas: bancoUsuarios[k].metasLinhas || [], realizadoLinhas: {} }; 
             } 
         } 
     }
@@ -1326,8 +1458,13 @@ function gerarGraficos(dadosVendas) {
             if (supervisorFoco === "todos" && !podeGerenciar(usuarioLogado, k)) continue; 
             
             let metaIndPromotor = bancoUsuarios[k].meta || 0; 
-            let taxaSup = taxasCoparticipacao[supDoPromotor] || taxasCoparticipacao["geral"] || 25; 
-            let metaPremPromotor = metaIndPromotor * (taxaSup / 100); 
+            let metaPremPromotor = 0;
+            if (bancoUsuarios[k].metaPremiumAbs !== undefined && bancoUsuarios[k].metaPremiumAbs !== "") {
+                metaPremPromotor = Number(bancoUsuarios[k].metaPremiumAbs);
+            } else {
+                let taxaSup = taxasCoparticipacao[supDoPromotor] || taxasCoparticipacao["geral"] || 25; 
+                metaPremPromotor = Math.round(metaIndPromotor * (taxaSup / 100)); 
+            }
             
             if (agrupamento === "supervisor") { 
                 if (supDoPromotor && bancoUsuarios[supDoPromotor]) { 
@@ -1336,7 +1473,7 @@ function gerarGraficos(dadosVendas) {
                 } 
             } else { 
                 let pNome = bancoUsuarios[k].nome || k; 
-                metricas[pNome] = { login: k, nome: pNome, metaPremium: metaPremPromotor, metaIndividual: metaIndPromotor, realizadoPremium: 0, realizadoGeral: 0, modelosPremiumVendidos: {}, modelosVendidosGeral: {}, comissaoAcumulada: 0 }; 
+                metricas[pNome] = { login: k, nome: pNome, metaPremium: metaPremPromotor, metaIndividual: metaIndPromotor, realizadoPremium: 0, realizadoGeral: 0, modelosPremiumVendidos: {}, modelosVendidosGeral: {}, comissaoAcumulada: 0, metasLinhas: bancoUsuarios[k].metasLinhas || [], realizadoLinhas: {} }; 
             } 
         } 
     }
@@ -1344,26 +1481,13 @@ function gerarGraficos(dadosVendas) {
     dadosVendas.forEach(row => {
         let loja = row.loja || "Outras"; 
         let pKey = row.promotor_login; 
-        
         if (lojaFoco !== "todas" && loja !== lojaFoco) return;
-        
         let pertenceAoEscopo = false;
-        
-        if (promotorFoco === "todos") {
-            if (supervisorFoco === "todos") {
-                if (podeGerenciar(usuarioLogado, pKey)) pertenceAoEscopo = true;
-            } else {
-                if (bancoUsuarios[pKey] && bancoUsuarios[pKey].criadoPor === supervisorFoco) pertenceAoEscopo = true;
-            }
-        } else {
-            if (pKey === promotorFoco) pertenceAoEscopo = true;
-        }
-
+        if (promotorFoco === "todos") { if (supervisorFoco === "todos") { if (podeGerenciar(usuarioLogado, pKey)) pertenceAoEscopo = true; } else { if (bancoUsuarios[pKey] && bancoUsuarios[pKey].criadoPor === supervisorFoco) pertenceAoEscopo = true; } } else { if (pKey === promotorFoco) pertenceAoEscopo = true; }
         if (!pertenceAoEscopo) return; 
 
         let match = (row.Vendedor || "").match(/^\[(.*?)\]\s*(.*)$/); 
         let vendNome = match ? match[2] : row.Vendedor;
-        
         let lista = (row.Aparelhos || "").split("||").map(x => x.trim()).filter(x => x !== ""); 
         let qtd = lista.length; 
         
@@ -1384,44 +1508,48 @@ function gerarGraficos(dadosVendas) {
         lista.forEach(ap => { 
             let chaveKey = extrairChaveAparelho(ap); 
             let modeloFormatado = (mapaEmojis[chaveKey] ? mapaEmojis[chaveKey] + " " : "") + chaveKey.toUpperCase();
+            let nomeApUpper = ap.toUpperCase();
             
             if (!vendasPorModelo[modeloFormatado]) vendasPorModelo[modeloFormatado] = 0; 
             vendasPorModelo[modeloFormatado] += 1; 
             
             let checkPrem = ehPremium(ap, supervisorFoco !== "todos" ? supervisorFoco : "geral");
-            
-            if (visualizarVendedores && checkPrem) { 
-                vendNome.split(" e ").forEach(vN => { rankingPorLoja[loja][vN.trim()].qtdPremium += 1; }); 
-            }
+            if (visualizarVendedores && checkPrem) { vendNome.split(" e ").forEach(vN => { rankingPorLoja[loja][vN.trim()].qtdPremium += 1; }); }
+
+            let processarLinha = (nomeAvo) => {
+                if (metricas[nomeAvo]) {
+                    metricas[nomeAvo].realizadoGeral += 1; 
+                    metricas[nomeAvo].modelosVendidosGeral[chaveKey] = (metricas[nomeAvo].modelosVendidosGeral[chaveKey] || 0) + 1; 
+                    
+                    if (metricas[nomeAvo].metasLinhas) {
+                        metricas[nomeAvo].metasLinhas.forEach(ml => {
+                            let arrModelosDestaLinha = ml.linha.split(',').map(s => s.trim());
+                            let matchNoGrupo = arrModelosDestaLinha.some(mod => nomeApUpper.includes(mod));
+                            if (matchNoGrupo) { 
+                                metricas[nomeAvo].realizadoLinhas[ml.linha] = (metricas[nomeAvo].realizadoLinhas[ml.linha] || 0) + 1; 
+                            }
+                        });
+                    }
+                    
+                    if (checkPrem) { 
+                        metricas[nomeAvo].realizadoPremium += 1; 
+                        modelosFocoVendidos[modeloFormatado] = (modelosFocoVendidos[modeloFormatado] || 0) + 1; 
+                        metricas[nomeAvo].modelosPremiumVendidos[chaveKey] = (metricas[nomeAvo].modelosPremiumVendidos[chaveKey] || 0) + 1; 
+                    } 
+                }
+            };
 
             if (agrupamento === "supervisor") { 
                 let supKey = bancoUsuarios[pKey] ? bancoUsuarios[pKey].criadoPor : null;
                 if (supKey) {
                     let userSup = bancoUsuarios[supKey]; 
                     let nomeSup = userSup ? (userSup.nome || supKey) : supKey; 
-                    if (metricas[nomeSup]) { 
-                        metricas[nomeSup].realizadoGeral += 1; 
-                        metricas[nomeSup].modelosVendidosGeral[chaveKey] = (metricas[nomeSup].modelosVendidosGeral[chaveKey] || 0) + 1; 
-                        if (checkPrem) { 
-                            metricas[nomeSup].realizadoPremium += 1; 
-                            modelosFocoVendidos[modeloFormatado] = (modelosFocoVendidos[modeloFormatado] || 0) + 1; 
-                            metricas[nomeSup].modelosPremiumVendidos[chaveKey] = (metricas[nomeSup].modelosPremiumVendidos[chaveKey] || 0) + 1; 
-                        } 
-                    } 
+                    processarLinha(nomeSup);
                 }
             } else { 
                 let userP = bancoUsuarios[pKey]; 
                 let pNome = userP ? (userP.nome || pKey) : pKey; 
-                
-                if (metricas[pNome]) { 
-                    metricas[pNome].realizadoGeral += 1; 
-                    metricas[pNome].modelosVendidosGeral[chaveKey] = (metricas[pNome].modelosVendidosGeral[chaveKey] || 0) + 1; 
-                    if (checkPrem) { 
-                        metricas[pNome].realizadoPremium += 1; 
-                        modelosFocoVendidos[modeloFormatado] = (modelosFocoVendidos[modeloFormatado] || 0) + 1; 
-                        metricas[pNome].modelosPremiumVendidos[chaveKey] = (metricas[pNome].modelosPremiumVendidos[chaveKey] || 0) + 1; 
-                    } 
-                } 
+                processarLinha(pNome);
             }
         });
     });
@@ -1470,11 +1598,19 @@ function gerarGraficos(dadosVendas) {
         m.comissaoAcumulada = comissaoUser;
     });
 
-    let diasParaMedia = new Date().getDate(); if (diasParaMedia < 1) diasParaMedia = 1; 
-    let mediaDiaria = totalGeral > 0 ? (totalGeral / diasParaMedia).toFixed(1) : 0;
+    let diasPassadosMes = new Date().getDate(); if (diasPassadosMes < 1) diasPassadosMes = 1; 
+    let mediaDiaria = totalGeral > 0 ? (totalGeral / diasPassadosMes).toFixed(1) : 0;
     
-    document.getElementById("total-vendas-geral").innerText = `${totalGeral} un`; 
-    document.getElementById("media-diaria-geral").innerText = `${mediaDiaria} un`;
+    let diasNoMesAtual = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+    let projecaoPace = Math.round((totalGeral / diasPassadosMes) * diasNoMesAtual);
+    let diasUteis = typeof calcularDiasUteisRestantes === 'function' ? calcularDiasUteisRestantes() : 0;
+
+    let htmlPace = `<div style="font-size: 11px; margin-top: 5px; color: rgba(255,255,255,0.8);">Projeção (Pace): <strong>${projecaoPace} un</strong></div>`;
+    let htmlDiasUteis = `<div style="font-size: 11px; margin-top: 5px; color: rgba(255,255,255,0.8);"><i data-lucide="calendar" class="lucide-sm" style="margin:0; width:12px; height:12px;"></i> Faltam: <strong>${diasUteis} dias úteis</strong></div>`;
+    
+    document.getElementById("total-vendas-geral").innerHTML = `${totalGeral} un ${htmlPace}`; 
+    document.getElementById("media-diaria-geral").innerHTML = `${mediaDiaria} un ${htmlDiasUteis}`;
+    
     let comissaoTotalGeral = Object.values(metricas).reduce((acc, m) => acc + (m.comissaoAcumulada || 0), 0); 
     let valorFormatado = `R$ ${comissaoTotalGeral.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`; 
     let elComissao = document.getElementById("total-comissao-geral"); 
@@ -1501,7 +1637,25 @@ function gerarGraficos(dadosVendas) {
     } else {
         document.getElementById("titulo-ranking-dash").innerHTML = (agrupamento === "supervisor") ? '<i data-lucide="award"></i> Ranking de Equipes (vs Meta)' : '<i data-lucide="award"></i> Ranking de Promotores (vs Meta Individual)'; 
         promOrd = Object.keys(metricas).sort((a,b) => metricas[b].realizadoGeral - metricas[a].realizadoGeral); let rNum = 1; let uQtd = -1;
-        promOrd.forEach(p => { let m = metricas[p]; if(uQtd !== -1 && m.realizadoGeral < uQtd) rNum++; uQtd = m.realizadoGeral; let bC = rNum === 1 ? 'rank-1' : rNum === 2 ? 'rank-2' : rNum === 3 ? 'rank-3' : 'rank-outros'; let metaAlvo = m.metaIndividual; let pctHit = metaAlvo > 0 ? ((m.realizadoGeral / metaAlvo) * 100).toFixed(1) : 0; let corHit = pctHit >= 100 ? '#10b981' : '#ef4444'; let labelMetaRanking = agrupamento === "supervisor" ? "Meta Acumulada" : "Meta Individual"; let pctFocoVendedor = m.realizadoGeral > 0 ? ((m.realizadoPremium / m.realizadoGeral) * 100).toFixed(1) : 0; htmlRank += `<div style="display:flex;flex-direction:column;padding:12px 0;border-bottom:1px dashed var(--border-color);"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><div style="display:flex;align-items:center;gap:10px;"><span class="badge-rank ${bC}">${rNum}º</span><strong style="font-size: 15px;"><i data-lucide="${agrupamento === 'supervisor' ? 'users' : 'user'}" class="lucide-sm"></i> ${p}</strong></div><span style="background:var(--bg-item);color:var(--primary);font-weight:bold;padding:4px 10px;border-radius:6px;font-size:14px;">${m.realizadoGeral} un</span></div><div style="display:flex;justify-content:space-between;font-size:11px;color:var(--cor-secundaria);background:var(--bg-item);padding:4px 8px;border-radius:4px;"><span>🎯 ${labelMetaRanking}: <strong>${metaAlvo} un</strong></span><span style="color: ${corHit}; font-weight: bold;">${pctHit}% Concluído</span></div><div style="font-size:11px; color:var(--cor-secundaria); text-align:left; padding-left:4px; margin-top:2px;">Coparticipação Foco: <strong>${m.realizadoPremium} un</strong> (<span style="color:#10b981;">${pctFocoVendedor}%</span>)</div></div>`; });
+        promOrd.forEach(p => { 
+            let m = metricas[p]; if(uQtd !== -1 && m.realizadoGeral < uQtd) rNum++; uQtd = m.realizadoGeral; let bC = rNum === 1 ? 'rank-1' : rNum === 2 ? 'rank-2' : rNum === 3 ? 'rank-3' : 'rank-outros'; let metaAlvo = m.metaIndividual; let pctHit = metaAlvo > 0 ? ((m.realizadoGeral / metaAlvo) * 100).toFixed(1) : 0; let corHit = pctHit >= 100 ? '#10b981' : '#ef4444'; let labelMetaRanking = agrupamento === "supervisor" ? "Meta Acumulada" : "Meta Individual"; let pctFocoVendedor = m.realizadoGeral > 0 ? ((m.realizadoPremium / m.realizadoGeral) * 100).toFixed(1) : 0; 
+            
+            let htmlMetasExtras = "";
+            if (m.metasLinhas && m.metasLinhas.length > 0) {
+                htmlMetasExtras += `<div style="display:flex; flex-direction:column; gap:6px; margin-top:8px; border-top:1px dashed var(--border-color); padding-top:8px;">`;
+                m.metasLinhas.forEach(ml => {
+                    let real = m.realizadoLinhas[ml.linha] || 0;
+                    let corL = real >= ml.qtd ? '#10b981' : (real > 0 ? '#f59e0b' : 'var(--cor-secundaria)');
+                    htmlMetasExtras += `<div style="display:flex; justify-content:space-between; align-items:center; font-size:11px;">
+                        <span style="color:var(--cor-texto);">Alvo <strong style="color:var(--primary);">${ml.linha.replace(/,/g, ' + ')}</strong>:</span>
+                        <span style="background:var(--bg-fundo); color:${corL}; padding:4px 8px; border-radius:6px; font-weight:bold; border: 1px solid ${corL};">${real} / ${ml.qtd} un</span>
+                    </div>`;
+                });
+                htmlMetasExtras += `</div>`;
+            }
+
+            htmlRank += `<div style="display:flex;flex-direction:column;padding:12px 0;border-bottom:1px dashed var(--border-color);"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><div style="display:flex;align-items:center;gap:10px;"><span class="badge-rank ${bC}">${rNum}º</span><strong style="font-size: 15px;"><i data-lucide="${agrupamento === 'supervisor' ? 'users' : 'user'}" class="lucide-sm"></i> ${p}</strong></div><span style="background:var(--bg-item);color:var(--primary);font-weight:bold;padding:4px 10px;border-radius:6px;font-size:14px;">${m.realizadoGeral} un</span></div><div style="display:flex;justify-content:space-between;font-size:11px;color:var(--cor-secundaria);background:var(--bg-item);padding:4px 8px;border-radius:4px;"><span>🎯 ${labelMetaRanking}: <strong>${metaAlvo} un</strong></span><span style="color: ${corHit}; font-weight: bold;">${pctHit}% Concluído</span></div><div style="font-size:11px; color:var(--cor-secundaria); text-align:left; padding-left:4px; margin-top:2px;">Alvo Premium/Foco: <strong style="color:#10b981;">${m.realizadoPremium} / ${m.metaPremium} un</strong></div>${htmlMetasExtras}</div>`; 
+        });
     }
     document.getElementById("lista-ranking-promotores").innerHTML = htmlRank || "<span style='font-size:13px; color:var(--cor-secundaria);'>Nenhuma venda registrada.</span>"; loadIcons();
 
@@ -1510,14 +1664,36 @@ function gerarGraficos(dadosVendas) {
         let corTextoGrafico = document.body.classList.contains('dark-mode') ? '#f8fafc' : '#64748b'; Chart.defaults.color = corTextoGrafico; const pluginsArr = typeof ChartDataLabels !== 'undefined' ? [ChartDataLabels] : []; let labelsProm = Object.keys(metricas); let metasArr = labelsProm.map(p => metricas[p].metaPremium); let maxMeta = metasArr.length > 0 ? Math.max(...metasArr) : 10; if(maxMeta === -Infinity || maxMeta < 1) maxMeta = 10; 
         let widthProm = Math.max(100, labelsProm.length * 18); let wrapCapa = document.getElementById('wrap-graficoMetaPremiumCapa'); if(wrapCapa) wrapCapa.style.minWidth = widthProm + '%'; let wrapCopart = document.getElementById('wrap-graficoCoparticipacaoPromotores'); if(wrapCopart) wrapCopart.style.minWidth = widthProm + '%';
 
-        const ctxCapa = document.getElementById('graficoMetaPremiumCapa').getContext('2d'); chartCapa = new Chart(ctxCapa, { type: 'bar', plugins: pluginsArr, data: { labels: labelsProm, datasets: [{ label: 'Meta Foco (un)', data: labelsProm.map(p => Math.round(metricas[p].metaPremium * 10) / 10), backgroundColor: '#c0c0c0' }, { label: 'Realizado Foco', data: labelsProm.map(p => metricas[p].realizadoPremium), backgroundColor: '#f59e0b' }]}, options: { responsive: true, maintainAspectRatio: false, layout: { padding: { top: 45 } }, plugins: { legend: { position: 'bottom' }, datalabels: { anchor: 'end', align: 'top', offset: 4, formatter: (val, ctx) => { if (ctx.datasetIndex === 0) return val + ' un'; let p = ctx.chart.data.labels[ctx.dataIndex]; let m = metricas[p]; let pct = m.metaPremium > 0 ? ((val / m.metaPremium) * 100).toFixed(1) : 0; return [`${val} un`, `(${pct}%)`]; }, font: { weight: 'bold', size: 10 }, color: corTextoGrafico, textAlign: 'center' } }, scales: { y: { beginAtZero: true, suggestedMax: maxMeta * 1.3 } } } });
+        const ctxCapa = document.getElementById('graficoMetaPremiumCapa').getContext('2d'); chartCapa = new Chart(ctxCapa, { type: 'bar', plugins: pluginsArr, data: { labels: labelsProm, datasets: [{ label: 'Meta Foco (un)', data: labelsProm.map(p => metricas[p].metaPremium), backgroundColor: '#c0c0c0' }, { label: 'Realizado Foco', data: labelsProm.map(p => metricas[p].realizadoPremium), backgroundColor: '#f59e0b' }]}, options: { responsive: true, maintainAspectRatio: false, layout: { padding: { top: 45 } }, plugins: { legend: { position: 'bottom' }, datalabels: { anchor: 'end', align: 'top', offset: 4, formatter: (val, ctx) => { if (ctx.datasetIndex === 0) return val + ' un'; let p = ctx.chart.data.labels[ctx.dataIndex]; let m = metricas[p]; let pct = m.metaPremium > 0 ? ((val / m.metaPremium) * 100).toFixed(1) : 0; return [`${val} un`, `(${pct}%)`]; }, font: { weight: 'bold', size: 10 }, color: corTextoGrafico, textAlign: 'center' } }, scales: { y: { beginAtZero: true, suggestedMax: maxMeta * 1.3 } } } });
         const ctxCopart = document.getElementById('graficoCoparticipacaoPromotores').getContext('2d'); chartCoparticipacao = new Chart(ctxCopart, { type: 'bar', plugins: pluginsArr, data: { labels: labelsProm, datasets: [{ label: '% Coparticipação', data: labelsProm.map(p => metricas[p].realizadoGeral > 0 ? ((metricas[p].realizadoPremium / metricas[p].realizadoGeral) * 100).toFixed(1) : 0), backgroundColor: '#0086ff' }] }, options: { responsive: true, maintainAspectRatio: false, layout: { padding: { top: 45 } }, plugins: { legend: { display: false }, tooltip: { padding: 12, callbacks: { label: function(context) { let p = context.chart.data.labels[context.dataIndex]; let m = metricas[p]; let linhas = [`Coparticipação: ${context.raw}% (${m.realizadoPremium} de ${m.realizadoGeral} un)`]; if (m.realizadoPremium > 0) { linhas.push('-------------------------'); linhas.push('Aparelhos Foco Vendidos:'); for (let mod in m.modelosPremiumVendidos) { linhas.push(`• ${m.modelosPremiumVendidos[mod]}x ${mod}`); } } return linhas; } } }, datalabels: { anchor: 'end', align: 'top', offset: 4, formatter: (val, ctx) => { let p = ctx.chart.data.labels[ctx.dataIndex]; let m = metricas[p]; return [`${val}%`, `(${m.realizadoPremium} de ${m.realizadoGeral} un)`]; }, font: { weight: 'bold', size: 10 }, color: corTextoGrafico, textAlign: 'center' } }, scales: { y: { beginAtZero: true, suggestedMax: 100 } } } });
 
         let lojasSort = Object.keys(vendasPorLoja).sort((a,b) => a.localeCompare(b, undefined, {numeric:true, sensitivity:'base'})); 
         let widthLojas = Math.max(100, lojasSort.length * 18); let wrapLojas = document.getElementById('wrap-graficoVendasLoja'); if(wrapLojas) wrapLojas.style.minWidth = widthLojas + '%';
         const ctxLojas = document.getElementById('graficoVendasLoja').getContext('2d'); chartLojas = new Chart(ctxLojas, { type: 'bar', plugins: pluginsArr, data: { labels: lojasSort, datasets: [{ data: lojasSort.map(l => vendasPorLoja[l]), backgroundColor: '#10b981', borderRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, layout: { padding: { top: 20 } }, scales: { x: { ticks: { display: false }, grid: { display: false } }, y: { beginAtZero: true } }, plugins: { legend: { display: false }, tooltip: { padding: 12, callbacks: { title: function(context) { return '🏪 ' + context[0].label; }, afterTitle: function(context) { let nomePromotor = getPromotorDaLoja(context[0].label); return '👤 Promotor: ' + nomePromotor; }, label: function(context) { return 'Total Vendido: ' + context.raw + ' un'; } } }, datalabels: { anchor: 'end', align: 'top', color: corTextoGrafico, font: { weight: 'bold' }, formatter: (val) => val + ' un' } } } });
 
-        let topModelos = Object.entries(vendasPorModelo).sort((a, b) => b[1] - a[1]).slice(0, 5); const ctxModelos = document.getElementById('graficoTopModelos').getContext('2d'); chartModelos = new Chart(ctxModelos, { type: 'doughnut', plugins: pluginsArr, data: { labels: topModelos.map(m => `${m[0]}`), datasets: [{ data: topModelos.map(m => m[1]), backgroundColor: ['#0086ff', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'] }] }, options: { maintainAspectRatio: false, responsive: true, plugins: { legend: { position: 'bottom', labels: { color: corTextoGrafico } }, datalabels: { color: '#fff', font: { weight: 'bold', size: 12 }, formatter: (value) => value > 0 ? value + ' un' : '' } } } });
+        let topModelos = Object.entries(vendasPorModelo).sort((a, b) => b[1] - a[1]); 
+        const ctxModelos = document.getElementById('graficoTopModelos').getContext('2d'); 
+        const paletaCores = ['#0086ff', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#38bdf8', '#fb923c', '#f472b6', '#2dd4bf', '#a78bfa', '#e879f9', '#94a3b8', '#fb7185', '#34d399', '#fbbf24', '#c084fc', '#4ade80'];
+        
+        chartModelos = new Chart(ctxModelos, { 
+            type: 'doughnut', 
+            plugins: pluginsArr, 
+            data: { 
+                labels: topModelos.map(m => `${m[0]}`), 
+                datasets: [{ 
+                    data: topModelos.map(m => m[1]), 
+                    backgroundColor: topModelos.map((_, index) => paletaCores[index % paletaCores.length]) 
+                }] 
+            }, 
+            options: { 
+                maintainAspectRatio: false, 
+                responsive: true, 
+                plugins: { 
+                    legend: { position: 'bottom', labels: { color: corTextoGrafico } }, 
+                    datalabels: { color: '#fff', font: { weight: 'bold', size: 12 }, formatter: (value) => value > 0 ? value + ' un' : '' } 
+                } 
+            } 
+        });
         
         setTimeout(() => {
             if(document.getElementById('tela-dashboard').classList.contains('ativa')) {
@@ -1529,6 +1705,10 @@ function gerarGraficos(dadosVendas) {
 
     } catch(errG) { console.error("Erro interno nos gráficos:", errG); }
 }
+// ==========================================
+// app.js - PARTE 6 DE 6
+// Market Share, Admin Inteligente, Batalha e Exportação
+// ==========================================
 
 async function carregarGraficosShare() {
     if (!navigator.onLine) { mostrarToast("Sem conexão.", "erro"); return; }
@@ -1759,7 +1939,7 @@ function renderizarTermometroLojas(resumoLojas) {
     loadIcons();
 }
 
-// ================= ADMIN, CONFIGURAÇÕES E BATALHA =================
+// ================= ADMIN E CONFIGURAÇÕES =================
 function renderizarSelectRegioes() { let regioesUnicas = new Set(); for (let k in bancoUsuarios) { if (bancoUsuarios[k].regiao) regioesUnicas.add(bancoUsuarios[k].regiao.toUpperCase()); } let sel = document.getElementById('admin-gs-regiao-select'); if (!sel) return; let html = '<option value="">Selecione a Região...</option>'; let regioesArray = Array.from(regioesUnicas).sort(); regioesArray.forEach(r => { html += `<option value="${r}">${r}</option>`; }); html += '<option value="NOVA">➕ Criar Nova Região</option>'; sel.innerHTML = html; }
 function verificarNovaRegiao(val) { let inp = document.getElementById('admin-gs-regiao-input'); if(val === 'NOVA') { inp.style.display = 'block'; } else { inp.style.display = 'none'; inp.value = ''; } }
 
@@ -1996,10 +2176,120 @@ function removerLinhaCampanha(index) { let selSup = document.getElementById('sel
 
 function fecharModalEdicao() { document.getElementById('modal-edicao').classList.remove('ativo'); }
 
+// AQUI ENTRAM AS FUNÇÕES INTELIGENTES NOVAS DE METAS POR LINHA
+window.opcoesInteligentesMeta = function() {
+    let options = `<option value="" disabled selected>+ Clique para adicionar modelo...</option>`;
+    options += `<optgroup label="Famílias (Agrupados)">`;
+    options += `<option value="RENO">📱 Toda a Linha RENO</option>`;
+    options += `<option value=" A">📱 Toda a Linha A</option>`; 
+    options += `</optgroup>`;
+    options += `<optgroup label="Aparelhos Específicos">`;
+    for (let ap in mapaEmojis) {
+        let nomeUpper = ap.toUpperCase();
+        options += `<option value="${nomeUpper}">${mapaEmojis[ap]} ${nomeUpper}</option>`;
+    }
+    options += `</optgroup>`;
+    return options;
+};
+
+function adminAbrirModalMeta(login) { 
+    document.getElementById('modal-edicao-titulo').innerHTML = `<i data-lucide="target"></i> Metas (@${login})`; 
+    
+    let metaGeral = bancoUsuarios[login].meta || 0;
+    let metaPremAbs = bancoUsuarios[login].metaPremiumAbs !== undefined ? bancoUsuarios[login].metaPremiumAbs : '';
+    let metasLinhas = bancoUsuarios[login].metasLinhas || [];
+
+    let linhasHtml = '';
+    metasLinhas.forEach((m) => {
+        linhasHtml += `
+        <div class="linha-meta-especifica" style="display:flex; gap:8px; margin-bottom:12px; align-items:flex-start;">
+            <div style="flex:2; display:flex; flex-direction:column; gap:4px;">
+                <div style="display:flex; border: 1px solid var(--border-color); border-radius: 8px; overflow:hidden; background:var(--bg-input);">
+                    <input type="text" class="input-linha-nome" value="${m.linha}" readonly placeholder="Modelos agrupados..." style="border:none; padding:10px; width:100%; font-size:11px; font-weight:bold; color:var(--primary); background:transparent; margin:0;">
+                    <button class="btn-excluir" onclick="this.previousElementSibling.value=''" style="padding:10px; border-radius:0; background:transparent;"><i data-lucide="x" style="margin:0; color:#ef4444; width:14px;"></i></button>
+                </div>
+                <select onchange="if(this.value){ let inp = this.previousElementSibling.querySelector('.input-linha-nome'); inp.value = inp.value ? inp.value + ', ' + this.value : this.value; this.selectedIndex = 0; }" style="margin:0; padding:8px; border-radius:8px; border-color:var(--primary); font-size:11px; background: var(--bg-item); color: var(--cor-texto);">
+                    ${window.opcoesInteligentesMeta()}
+                </select>
+            </div>
+            <input type="number" class="input-linha-qtd" value="${m.qtd}" placeholder="Qtd" style="flex:0.6; margin:0; padding:10px; border-radius:8px; height: 36px; text-align:center;">
+            <button class="btn-excluir" onclick="this.parentElement.remove()" style="padding:10px; border-radius:8px; height: 36px;"><i data-lucide="trash-2" style="margin:0;"></i></button>
+        </div>`;
+    });
+
+    document.getElementById('modal-edicao-corpo').innerHTML = `
+        <div style="background: var(--bg-item); padding: 15px; border-radius: 12px; margin-bottom: 15px; border: 1px solid var(--border-color);">
+            <label style="font-size: 13px; font-weight: bold; color: var(--cor-texto); display: flex; align-items: center; gap:6px; margin-bottom: 8px;"><i data-lucide="shopping-bag" class="lucide-sm" style="color:var(--primary);"></i> Meta Global da Loja (Volume):</label>
+            <input type="number" id="input-edit-meta" value="${metaGeral}" placeholder="Ex: 50" style="margin-bottom: 0; font-size: 16px; font-weight: bold;">
+        </div>
+        
+        <div style="background: rgba(16, 185, 129, 0.05); padding: 15px; border-radius: 12px; margin-bottom: 15px; border: 1px dashed #10b981;">
+            <label style="font-size: 13px; font-weight: bold; color: #10b981; display: flex; align-items: center; gap:6px; margin-bottom: 8px;"><i data-lucide="star" class="lucide-sm"></i> Meta Foco/Premium Específica:</label>
+            <input type="number" id="input-edit-prem-abs" value="${metaPremAbs}" placeholder="Vazio = Usa a % da Equipe" style="margin-bottom: 0; border-color: #10b981; font-weight: bold;">
+        </div>
+        
+        <div style="border-top: 1px dashed var(--border-color); padding-top: 15px; margin-top: 15px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                <label style="font-size: 13px; font-weight: bold; color: var(--primary); margin:0; display: flex; align-items: center; gap:6px;"><i data-lucide="smartphone" class="lucide-sm"></i> Bolsões de Meta (Mix):</label>
+                <button class="btn-editar" onclick="adicionarInputLinhaMeta()" style="padding:6px 10px; font-size:11px; background:var(--primary); color:white;"><i data-lucide="plus" class="lucide-sm"></i> Linha</button>
+            </div>
+            <div id="container-metas-linhas">
+                ${linhasHtml}
+            </div>
+        </div>
+    `; 
+    
+    let btn = document.getElementById('btn-salvar-edicao'); 
+    btn.onclick = function() { 
+        let valMeta = parseInt(document.getElementById('input-edit-meta').value) || 0; 
+        let valPremAbs = document.getElementById('input-edit-prem-abs').value.trim();
+        
+        let arrayLinhas = [];
+        document.querySelectorAll('.linha-meta-especifica').forEach(el => {
+            let nomeLinha = el.querySelector('.input-linha-nome').value.trim().toUpperCase();
+            let qtdLinha = parseInt(el.querySelector('.input-linha-qtd').value) || 0;
+            if (nomeLinha && qtdLinha > 0) { arrayLinhas.push({ linha: nomeLinha, qtd: qtdLinha }); }
+        });
+
+        bancoUsuarios[login].meta = valMeta; 
+        bancoUsuarios[login].metasLinhas = arrayLinhas;
+        
+        if (valPremAbs !== "") { bancoUsuarios[login].metaPremiumAbs = parseInt(valPremAbs); } 
+        else { delete bancoUsuarios[login].metaPremiumAbs; }
+        
+        mostrarToast("Metas Inteligentes atualizadas!", "sucesso"); 
+        fecharModalEdicao(); 
+        if (document.getElementById('modal-gerenciar-equipe').classList.contains('ativa')) renderizarModalEquipe(); 
+    }; 
+    document.getElementById('modal-edicao').classList.add('ativo'); 
+    loadIcons(); 
+}
+
+window.adicionarInputLinhaMeta = function() {
+    let container = document.getElementById('container-metas-linhas');
+    let div = document.createElement('div');
+    div.className = 'linha-meta-especifica';
+    div.style.cssText = 'display:flex; gap:8px; margin-bottom:12px; align-items:flex-start; animation: fadeIn 0.3s;';
+    div.innerHTML = `
+        <div style="flex:2; display:flex; flex-direction:column; gap:4px;">
+            <div style="display:flex; border: 1px solid var(--border-color); border-radius: 8px; overflow:hidden; background:var(--bg-input);">
+                <input type="text" class="input-linha-nome" readonly placeholder="Adicione modelos abaixo 👇" style="border:none; padding:10px; width:100%; font-size:11px; font-weight:bold; color:var(--primary); background:transparent; margin:0;">
+                <button class="btn-excluir" onclick="this.previousElementSibling.value=''" style="padding:10px; border-radius:0; background:transparent;"><i data-lucide="x" style="margin:0; color:#ef4444; width:14px;"></i></button>
+            </div>
+            <select onchange="if(this.value){ let inp = this.previousElementSibling.querySelector('.input-linha-nome'); inp.value = inp.value ? inp.value + ', ' + this.value : this.value; this.selectedIndex = 0; }" style="margin:0; padding:8px; border-radius:8px; border-color:var(--primary); font-size:11px; background: var(--bg-item); color: var(--cor-texto);">
+                ${window.opcoesInteligentesMeta()}
+            </select>
+        </div>
+        <input type="number" class="input-linha-qtd" placeholder="Qtd" style="flex:0.6; margin:0; padding:10px; border-radius:8px; height: 36px; text-align:center;">
+        <button class="btn-excluir" onclick="this.parentElement.remove()" style="padding:10px; border-radius:8px; height: 36px;"><i data-lucide="trash-2" style="margin:0;"></i></button>
+    `;
+    container.appendChild(div);
+    loadIcons();
+}
+
 function adminAbrirModalSenha(login) { document.getElementById('modal-edicao-titulo').innerHTML = `<i data-lucide="key"></i> Senha (@${login})`; document.getElementById('modal-edicao-corpo').innerHTML = `<input type="text" id="input-edit-senha" value="${bancoUsuarios[login].senha}" placeholder="Nova Senha">`; let btn = document.getElementById('btn-salvar-edicao'); btn.onclick = function() { let val = document.getElementById('input-edit-senha').value.trim(); if(val) { bancoUsuarios[login].senha = val; mostrarToast("Senha alterada!", "sucesso"); fecharModalEdicao(); renderizarAdminUsuarios(); if (document.getElementById('modal-gerenciar-equipe').classList.contains('ativa')) renderizarModalEquipe(); } }; document.getElementById('modal-edicao').classList.add('ativo'); loadIcons(); }
 function adminAbrirModalNome(login) { document.getElementById('modal-edicao-titulo').innerHTML = `<i data-lucide="edit-3"></i> Nome (@${login})`; document.getElementById('modal-edicao-corpo').innerHTML = `<input type="text" id="input-edit-nome" value="${bancoUsuarios[login].nome || login}" placeholder="Nome Completo">`; let btn = document.getElementById('btn-salvar-edicao'); btn.onclick = function() { let val = document.getElementById('input-edit-nome').value.trim(); if(val) { bancoUsuarios[login].nome = val; mostrarToast("Nome alterada!", "sucesso"); fecharModalEdicao(); renderizarAdminUsuarios(); if (document.getElementById('modal-gerenciar-equipe').classList.contains('ativa')) renderizarModalEquipe(); } }; document.getElementById('modal-edicao').classList.add('ativo'); loadIcons(); }
 function adminAbrirModalRegiao(login) { document.getElementById('modal-edicao-titulo').innerHTML = `<i data-lucide="globe"></i> Região (@${login})`; document.getElementById('modal-edicao-corpo').innerHTML = `<input type="text" id="input-edit-regiao" value="${bancoUsuarios[login].regiao || ''}" placeholder="Nome da Região">`; let btn = document.getElementById('btn-salvar-edicao'); btn.onclick = function() { let val = document.getElementById('input-edit-regiao').value.trim().toUpperCase(); if(val) { bancoUsuarios[login].regiao = val; mostrarToast("Região alterada!", "sucesso"); fecharModalEdicao(); renderizarAdminUsuarios(); } }; document.getElementById('modal-edicao').classList.add('ativo'); loadIcons(); }
-function adminAbrirModalMeta(login) { document.getElementById('modal-edicao-titulo').innerHTML = `<i data-lucide="target"></i> Meta (@${login})`; document.getElementById('modal-edicao-corpo').innerHTML = `<input type="number" id="input-edit-meta" value="${bancoUsuarios[login].meta || 0}" placeholder="Meta Mensal">`; let btn = document.getElementById('btn-salvar-edicao'); btn.onclick = function() { let val = parseInt(document.getElementById('input-edit-meta').value) || 0; bancoUsuarios[login].meta = val; mostrarToast("Meta alterada!", "sucesso"); fecharModalEdicao(); if (document.getElementById('modal-gerenciar-equipe').classList.contains('ativa')) renderizarModalEquipe(); }; document.getElementById('modal-edicao').classList.add('ativo'); loadIcons(); }
 function adminAbrirModalCapa(loja) { document.getElementById('modal-edicao-titulo').innerHTML = `<i data-lucide="layers"></i> Capa (${loja})`; document.getElementById('modal-edicao-corpo').innerHTML = `<input type="number" id="input-edit-capa" value="${lojasConfig[loja].capa || 0}" placeholder="Capa da Loja">`; let btn = document.getElementById('btn-salvar-edicao'); btn.onclick = function() { let val = parseInt(document.getElementById('input-edit-capa').value) || 0; lojasConfig[loja].capa = val; mostrarToast("Capa alterada!", "sucesso"); fecharModalEdicao(); if (document.getElementById('modal-gerenciar-equipe').classList.contains('ativa')) renderizarModalEquipe(); }; document.getElementById('modal-edicao').classList.add('ativo'); loadIcons(); }
 function adminAbrirModalPermissoes(login) { let p = bancoUsuarios[login].permissoes || { vendas: true, acomp: true, estoque_ver: true, estoque_editar: true }; document.getElementById('modal-edicao-titulo').innerHTML = `<i data-lucide="shield"></i> Permissões (@${login})`; let html = `<div style="display:flex; flex-direction:column; gap:10px; font-size: 14px; color: var(--cor-texto);">`; html += `<label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="edit-p-vendas" ${p.vendas ? 'checked':''}> Lançar Vendas</label>`; html += `<label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="edit-p-acomp" ${p.acomp ? 'checked':''}> Acompanhamento</label>`; html += `<label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="edit-p-est-ver" ${p.estoque_ver ? 'checked':''}> Ver Estoque</label>`; html += `<label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="edit-p-est-edit" ${p.estoque_editar ? 'checked':''}> Editar Estoque</label></div>`; document.getElementById('modal-edicao-corpo').innerHTML = html; let btn = document.getElementById('btn-salvar-edicao'); btn.onclick = function() { bancoUsuarios[login].permissoes = { vendas: document.getElementById('edit-p-vendas').checked, acomp: document.getElementById('edit-p-acomp').checked, estoque_ver: document.getElementById('edit-p-est-ver').checked, estoque_editar: document.getElementById('edit-p-est-edit').checked }; mostrarToast("Permissões atualizadas!", "sucesso"); fecharModalEdicao(); }; document.getElementById('modal-edicao').classList.add('ativo'); loadIcons(); }
 
@@ -2174,4 +2464,47 @@ async function enviarFechamentoShare() {
         btn.innerHTML = 'Salvar Fechamento';
         loadIcons();
     }
+}
+
+// ================= EXPORTAÇÃO DE RELATÓRIOS (EXCEL/CSV) =================
+function exportarParaCSV(nomeArquivo, dados, colunas) {
+    if (dados.length === 0) return mostrarToast("Nenhum dado para exportar", "alerta");
+    let csvContent = "data:text/csv;charset=utf-8,\uFEFF";
+    csvContent += colunas.join(";") + "\r\n";
+    dados.forEach(row => {
+        let linha = colunas.map(col => {
+            let info = row[col] ? String(row[col]).replace(/;/g, ",") : "";
+            return `${info}`;
+        });
+        csvContent += linha.join(";") + "\r\n";
+    });
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `${nomeArquivo}_${new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    mostrarToast("Download iniciado!", "sucesso");
+}
+
+function baixarRelatorioAcomp() {
+    if (typeof dadosAcompanhamentoGlobal === 'undefined' || dadosAcompanhamentoGlobal.length === 0) {
+        return mostrarToast("Carregue os dados primeiro.", "alerta");
+    }
+    exportarParaCSV("Acompanhamento_Vendas", dadosAcompanhamentoGlobal, ["Data", "Vendedor", "Aparelhos", "Status"]);
+}
+
+function baixarRelatorioHistorico() {
+    if (typeof dadosHistoricoGlobal === 'undefined' || dadosHistoricoGlobal.length === 0) {
+        return mostrarToast("Carregue o histórico primeiro.", "alerta");
+    }
+    let dadosLimpos = dadosHistoricoGlobal.map(item => ({
+        Data: item.Data,
+        Tipo: item.Tipo,
+        Status: item.Status,
+        Promotor: item.Promotor,
+        Detalhe: item.Detalhe.replace(/<[^>]*>?/gm, '')
+    }));
+    exportarParaCSV("Historico_Auditoria", dadosLimpos, ["Data", "Tipo", "Status", "Promotor", "Detalhe"]);
 }
