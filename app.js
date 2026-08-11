@@ -991,21 +991,17 @@ function renderizarListaHistorico() {
             } 
         }
         
-        // TRATAMENTO INTELIGENTE PARA VENDAS MÚLTIPLAS E ÚNICAS
         let textoBase = item.detalhe.replace(/\[CANCELADO\]/ig, '').trim();
         let tituloResumo = ""; let listaItensHtml = "";
 
         if (item.isEstoque) {
             tituloResumo = textoBase;
         } else {
-            // Remove o prefixo "Venda:" se houver
             let limpo = textoBase.replace(/^Venda:\s*/i, '');
-            // Separa os aparelhos da loja/vendedor usando o pipe "|"
             let partesLojas = limpo.split('|');
             let aparelhosBrutos = partesLojas[0].trim();
-            let lojaVendedorInfo = partesLojas.slice(1).join('|').trim(); // ex: [Magazine Luiza 286] Faby
+            let lojaVendedorInfo = partesLojas.slice(1).join('|').trim(); 
 
-            // Quebra múltiplos aparelhos separados por "||"
             let arrayAparelhos = aparelhosBrutos.split('||').map(x => x.trim()).filter(x => x !== "");
             
             if (arrayAparelhos.length > 1) {
@@ -1016,7 +1012,6 @@ function renderizarListaHistorico() {
                 tituloResumo = limpo;
             }
 
-            // Monta a listagem limpa para dentro do Acordeão
             arrayAparelhos.forEach(ap => {
                 let imeiMatch = ap.match(/IMEI:\s*(.*?)(\)|$)/);
                 let imei = imeiMatch ? imeiMatch[1].trim() : "";
@@ -1072,8 +1067,6 @@ function renderizarListaHistorico() {
                     <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;">${nomePromotor}</span>
                 </div>
             </div>
-
-            <!-- CORPO DA VENDA (COM ACORDEÃO PARA MÚLTIPLOS APARELHOS) -->
             <div style="font-size: 14px; ${estiloTexto} text-align: left; display: flex;">
                 ${htmlCorpoVenda}
             </div>
@@ -1088,9 +1081,12 @@ function renderizarListaHistorico() {
     } 
 }
 
-function setFiltroDataRapidoDash(tipo) {
-    let inputInicio = document.getElementById('dash-data-inicio');
-    let inputFim = document.getElementById('dash-data-fim');
+// ==========================================
+// FUNÇÃO DE FILTRO RÁPIDO DO HISTÓRICO/AUDITORIA
+// ==========================================
+function setFiltroDataRapido(tipo) {
+    let inputInicio = document.getElementById('filtro-data-inicio-historico');
+    let inputFim = document.getElementById('filtro-data-fim-historico');
     if (!inputInicio || !inputFim) return;
     
     let hoje = new Date();
@@ -1125,8 +1121,7 @@ function setFiltroDataRapidoDash(tipo) {
         inputFim.value = "";
     }
     
-    abrirDashboard();
-    carregarGraficosShare();
+    aplicarFiltroHistorico();
 }
 // ==========================================
 // app.js - PARTE 7 DE 10
@@ -1515,7 +1510,7 @@ function forcarAtualizacaoDashboard() {
     let icone = document.getElementById('icon-refresh-dash'); 
     if(icone) icone.style.animation = "spin 1s linear infinite"; 
     abrirDashboard(); 
-    carregarGraficosShare(); 
+    if(typeof carregarGraficosShare === 'function') carregarGraficosShare(); 
 }
 
 function atualizarFiltroPromotorDash() { 
@@ -1571,8 +1566,8 @@ function atualizarFiltroLojaDash() {
     selLoja.innerHTML = htmlOp;
 }
 
-window.mudouSupervisorDash = function() { atualizarFiltroPromotorDash(); atualizarFiltroLojaDash(); abrirDashboard(); carregarGraficosShare(); };
-window.mudouPromotorDash = function() { atualizarFiltroLojaDash(); abrirDashboard(); carregarGraficosShare(); };
+window.mudouSupervisorDash = function() { atualizarFiltroPromotorDash(); atualizarFiltroLojaDash(); abrirDashboard(); if(typeof carregarGraficosShare === 'function') carregarGraficosShare(); };
+window.mudouPromotorDash = function() { atualizarFiltroLojaDash(); abrirDashboard(); if(typeof carregarGraficosShare === 'function') carregarGraficosShare(); };
 
 function abrirDashboard() { 
     mudarTela('tela-dashboard'); 
@@ -1603,7 +1598,6 @@ function abrirDashboard() {
     loadIcons(); 
     document.getElementById("total-vendas-geral").innerText = "..."; 
     
-    // TRATAMENTO BLINDADO DE DATAS PARA O SUPABASE
     let inputDtIni = document.getElementById("dash-data-inicio");
     let inputDtFim = document.getElementById("dash-data-fim");
     
@@ -1619,7 +1613,6 @@ function abrirDashboard() {
         if (error) throw error;
         
         let dados = (data || [])
-            // TRAVA ABSOLUTA: Remove tudo que for auditoria antes de gerar os gráficos e metas
             .filter(row => !(row.aparelhos_vendidos || "").toUpperCase().includes('[AUDITORIA]'))
             .map(row => ({
                 promotor_login: row.promotor_login, 
@@ -1645,12 +1638,10 @@ function abrirDashboard() {
         loadIcons(); 
     }); 
 }
+
 function toggleComissao() { let elComissao = document.getElementById("total-comissao-geral"); let iconeOlho = document.getElementById("icone-olho-comissao"); if (elComissao.innerText === "R$ ****") { elComissao.innerText = elComissao.dataset.valor || "R$ 0,00"; iconeOlho.innerHTML = '<i data-lucide="eye-off" style="margin:0;"></i>'; } else { elComissao.innerText = "R$ ****"; iconeOlho.innerHTML = '<i data-lucide="eye" style="margin:0;"></i>'; } loadIcons(); }
 function isCampaignActiveInMonth(startStr, endStr, mesSelecionado) { return true; }
 
-// ==========================================
-// SEÇÃO DO DASHBOARD COMPLETA (GERAR GRÁFICOS)
-// ==========================================
 function gerarGraficos(dadosVendas) {
     if (!dadosVendas) dadosVendas = []; 
     let totalGeral = 0; let vendasPorLoja = {}; let vendasPorModelo = {}; let metricas = {}; let modelosFocoVendidos = {}; let rankingPorLoja = {}; 
@@ -1877,24 +1868,20 @@ function gerarGraficos(dadosVendas) {
         document.getElementById("titulo-ranking-dash").innerHTML = (agrupamento === "supervisor") ? '<i data-lucide="award"></i> Ranking de Equipes (vs Meta)' : '<i data-lucide="award"></i> Ranking de Promotores (vs Meta Individual)'; 
         promOrd = Object.keys(metricas).sort((a,b) => metricas[b].realizadoGeral - metricas[a].realizadoGeral); let rNum = 1; let uQtd = -1;
         
-        // Pega as configurações de Gamificação da equipe
         let supAlvoGami = (supervisorFoco !== "todos") ? supervisorFoco : "geral";
         let configGami = (valoresComissao[supAlvoGami] && valoresComissao[supAlvoGami].gamificacao) ? valoresComissao[supAlvoGami].gamificacao : { iconeTop1: '👑', iconeMeta: '🎯', iconeFire: '🔥', minFire: 5 };
 
         promOrd.forEach(p => { 
             let m = metricas[p]; if(uQtd !== -1 && m.realizadoGeral < uQtd) rNum++; uQtd = m.realizadoGeral; let bC = rNum === 1 ? 'rank-1' : rNum === 2 ? 'rank-2' : rNum === 3 ? 'rank-3' : 'rank-outros'; let metaAlvo = m.metaIndividual; let pctHit = metaAlvo > 0 ? ((m.realizadoGeral / metaAlvo) * 100).toFixed(1) : 0; let corHit = pctHit >= 100 ? '#10b981' : '#ef4444'; let labelMetaRanking = agrupamento === "supervisor" ? "Meta Acumulada" : "Meta Individual"; let pctFocoVendedor = m.realizadoGeral > 0 ? ((m.realizadoPremium / m.realizadoGeral) * 100).toFixed(1) : 0; 
             
-            // --- INÍCIO: SISTEMA DE GAMIFICAÇÃO & GLOW ---
             let iconesGami = "";
             if (rNum === 1 && m.realizadoGeral > 0) iconesGami += `<span title="Top 1" style="margin-left: 6px; font-size: 16px; filter: drop-shadow(0px 0px 4px rgba(255, 215, 0, 0.8));">${configGami.iconeTop1}</span>`;
             if (pctHit >= 100 && metaAlvo > 0) iconesGami += `<span title="Meta Batida" style="margin-left: 4px; font-size: 16px; filter: drop-shadow(0px 0px 4px rgba(16, 185, 129, 0.8));">${configGami.iconeMeta}</span>`;
             if (m.realizadoPremium >= configGami.minFire && configGami.minFire > 0) iconesGami += `<span title="On Fire (Premium)" style="margin-left: 4px; font-size: 16px; filter: drop-shadow(0px 0px 4px rgba(245, 158, 11, 0.8));">${configGami.iconeFire}</span>`;
             
-            // Animação CSS para quem bateu a meta (Glow effect)
             let styleGlow = (pctHit >= 100 && metaAlvo > 0) 
                 ? "background: linear-gradient(135deg, rgba(16,185,129,0.08) 0%, transparent 100%); border: 1px solid rgba(16,185,129,0.3); border-left: 4px solid #10b981;" 
                 : "border-bottom: 1px dashed var(--border-color); border-left: 4px solid transparent;";
-            // --- FIM: SISTEMA DE GAMIFICAÇÃO & GLOW ---
 
             let htmlMetasExtras = "";
             if (m.metasLinhas && m.metasLinhas.length > 0) {
@@ -1918,7 +1905,6 @@ function gerarGraficos(dadosVendas) {
                 htmlMetasExtras += `</div>`;
             }
 
-            // HTML DO CARD MODIFICADO PARA RECEBER OS ÍCONES E O GLOW
             htmlRank += `<div style="display:flex;flex-direction:column;padding:12px 10px; border-radius: 8px; margin-bottom: 6px; transition: all 0.3s ease; ${styleGlow}"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><div style="display:flex;align-items:center;gap:10px;"><span class="badge-rank ${bC}">${rNum}º</span><strong style="font-size: 15px; display:flex; align-items:center;"><i data-lucide="${agrupamento === 'supervisor' ? 'users' : 'user'}" class="lucide-sm"></i> ${p} ${iconesGami}</strong></div><span style="background:var(--bg-item);color:var(--primary);font-weight:bold;padding:4px 10px;border-radius:6px;font-size:14px;">${m.realizadoGeral} un</span></div><div style="display:flex;justify-content:space-between;font-size:11px;color:var(--cor-secundaria);background:var(--bg-item);padding:4px 8px;border-radius:4px;"><span>🎯 ${labelMetaRanking}: <strong>${metaAlvo} un</strong></span><span style="color: ${corHit}; font-weight: bold;">${pctHit}% Concluído</span></div><div style="font-size:11px; color:var(--cor-secundaria); text-align:left; padding-left:4px; margin-top:4px;">Alvo Premium/Foco: <strong style="color:#10b981;">${m.realizadoPremium} / ${m.metaPremium} un</strong></div>${htmlMetasExtras}</div>`; 
         });
     }
@@ -1936,7 +1922,6 @@ function gerarGraficos(dadosVendas) {
         let widthLojas = Math.max(100, lojasSort.length * 18); let wrapLojas = document.getElementById('wrap-graficoVendasLoja'); if(wrapLojas) wrapLojas.style.minWidth = widthLojas + '%';
         const ctxLojas = document.getElementById('graficoVendasLoja').getContext('2d'); chartLojas = new Chart(ctxLojas, { type: 'bar', plugins: pluginsArr, data: { labels: lojasSort, datasets: [{ data: lojasSort.map(l => vendasPorLoja[l]), backgroundColor: '#10b981', borderRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, layout: { padding: { top: 20 } }, scales: { x: { ticks: { display: false }, grid: { display: false } }, y: { beginAtZero: true } }, plugins: { legend: { display: false }, tooltip: { padding: 12, callbacks: { title: function(context) { return '🏪 ' + context[0].label; }, afterTitle: function(context) { let nomePromotor = getPromotorDaLoja(context[0].label); return '👤 Promotor: ' + nomePromotor; }, label: function(context) { return 'Total Vendido: ' + context.raw + ' un'; } } }, datalabels: { anchor: 'end', align: 'top', color: corTextoGrafico, font: { weight: 'bold' }, formatter: (val) => val + ' un' } } } });
 
-        // --- ANÁLISE DE CAPA DA LOJA VS REALIZADO ---
         let htmlCapaLojas = "";
         for (let loja in vendasPorLoja) {
             let vendido = vendasPorLoja[loja];
@@ -1995,7 +1980,7 @@ function gerarGraficos(dadosVendas) {
         });
 
         // ==========================================
-        // NOVOS GRÁFICOS: ANÁLISE AVANÇADA
+        // GRÁFICO DE HORÁRIOS DE PICO (CORRIGIDO) E PROJEÇÃO
         // ==========================================
         if (chartHorariosPico) chartHorariosPico.destroy();
         if (chartPaceVisual) chartPaceVisual.destroy();
@@ -2006,13 +1991,16 @@ function gerarGraficos(dadosVendas) {
             if (row.Data) {
                 let d = new Date(row.Data);
                 if (!isNaN(d)) {
-                    let h = String(d.getHours()).padStart(2, '0') + ":00";
-                    let qtdVendaItem = (row.Aparelhos || "").split("||").filter(x => x.trim() !== "").length;
-                    if (horasContador[h] !== undefined) {
-                        horasContador[h] += qtdVendaItem;
+                    let horaStr = String(d.getHours()).padStart(2, '0') + ":00";
+                    let listaItensVenda = (row.Aparelhos || "").split("||").filter(x => x.trim() !== "");
+                    let qtdNestaVenda = listaItensVenda.length > 0 ? listaItensVenda.length : 1;
+
+                    if (horasContador[horaStr] !== undefined) {
+                        horasContador[horaStr] += qtdNestaVenda;
                     } else {
-                        let faixa = Object.keys(horasContador).find(k => k.startsWith(String(d.getHours())));
-                        if (faixa) horasContador[faixa] += qtdVendaItem;
+                        let hNum = d.getHours();
+                        if (hNum < 8) horasContador["08:00"] += qtdNestaVenda;
+                        else if (hNum > 21) horasContador["21:00"] += qtdNestaVenda;
                     }
                 }
             }
@@ -2044,7 +2032,7 @@ function gerarGraficos(dadosVendas) {
             type: 'bar',
             plugins: pluginsArr,
             data: {
-                labels: ['Realizado até Agora', 'Projeção de Fechamento (Pace)', 'Meta Total do Mês'],
+                labels: ['Realizado até Agora', 'Projeção (Pace)', 'Meta do Mês'],
                 datasets: [{
                     data: [totalGeral, projecaoPace, somaMetasTotal > 0 ? somaMetasTotal : totalGeral],
                     backgroundColor: ['#0086ff', '#f59e0b', '#10b981'],
@@ -2058,7 +2046,7 @@ function gerarGraficos(dadosVendas) {
                 scales: { x: { beginAtZero: true, suggestedMax: Math.max(somaMetasTotal, projecaoPace, totalGeral) * 1.2 } }
             }
         });
-        
+
         setTimeout(() => {
             if(document.getElementById('tela-dashboard').classList.contains('ativa')) {
                 let isTop1 = false;
@@ -2068,6 +2056,49 @@ function gerarGraficos(dadosVendas) {
         }, 500);
 
     } catch(errG) { console.error("Erro interno nos gráficos:", errG); }
+}
+
+// ==========================================
+// FUNÇÃO DE FILTRO RÁPIDO DO DASHBOARD
+// ==========================================
+function setFiltroDataRapidoDash(tipo) {
+    let inputInicio = document.getElementById('dash-data-inicio');
+    let inputFim = document.getElementById('dash-data-fim');
+    if (!inputInicio || !inputFim) return;
+    
+    let hoje = new Date();
+    let formatarData = (d) => {
+        let ano = d.getFullYear();
+        let mes = String(d.getMonth() + 1).padStart(2, '0');
+        let dia = String(d.getDate()).padStart(2, '0');
+        return `${ano}-${mes}-${dia}`;
+    };
+    
+    if (tipo === 'hoje') {
+        let strHoje = formatarData(hoje);
+        inputInicio.value = strHoje;
+        inputFim.value = strHoje;
+    } else if (tipo === 'ontem') {
+        let ontem = new Date();
+        ontem.setDate(hoje.getDate() - 1);
+        let strOntem = formatarData(ontem);
+        inputInicio.value = strOntem;
+        inputFim.value = strOntem;
+    } else if (tipo === 'semana') {
+        let inicioSemana = new Date();
+        inicioSemana.setDate(hoje.getDate() - 7);
+        inputInicio.value = formatarData(inicioSemana);
+        inputFim.value = formatarData(hoje);
+    } else if (tipo === 'mes') {
+        let inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+        inputInicio.value = formatarData(inicioMes);
+        inputFim.value = formatarData(hoje);
+    } else if (tipo === 'limpar') {
+        inputInicio.value = "";
+        inputFim.value = "";
+    }
+    
+    forcarAtualizacaoDashboard();
 }
 // ==========================================
 // app.js - PARTE 9 DE 10
