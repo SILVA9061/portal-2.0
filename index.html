@@ -46,6 +46,7 @@
     <div class="nav-item" id="nav-admin" onclick="navAction('admin', this)"><i data-lucide="settings"></i><span>Ajustes</span></div>
 </nav>
 
+<!-- MODAIS DE VENDA, ESTOQUE, SHARE E CONFIG -->
 <div id="modal-cancelar-venda" class="modal-overlay">
     <div class="modal-content">
         <h3 style="color: #ef4444;"><i data-lucide="alert-triangle"></i> Cancelar Venda</h3>
@@ -239,6 +240,21 @@
 </div>
 </div>
 
+<!-- MODAL DE SEGURANÇA (CONFIRMAÇÃO DE AÇÃO) -->
+<div id="modal-senha-seguranca" class="modal-overlay">
+    <div class="modal-content">
+        <h3 style="color: #ef4444;"><i data-lucide="shield-alert"></i> Autenticação Necessária</h3>
+        <p style="font-size: 13px; color: var(--cor-secundaria); margin-bottom: 20px;">Esta é uma ação restrita. Por favor, confirme sua senha para continuar.</p>
+        
+        <input type="password" id="input-senha-seguranca" placeholder="Sua senha de acesso" style="border-color: #ef4444; text-align: center; font-size: 18px; letter-spacing: 2px;">
+        
+        <div class="botoes-acao">
+            <button class="btn-acao btn-limpar" onclick="fecharModalSenhaSeguranca()">Cancelar</button>
+            <button class="btn-acao btn-enviar" style="background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);" onclick="confirmarSenhaSeguranca()"><i data-lucide="check"></i> Confirmar</button>
+        </div>
+    </div>
+</div>
+
 <div class="container">
     <div class="header-global" id="header-global">
         <div id="header-view-home" style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
@@ -413,11 +429,8 @@
 </div>
 
 <div id="tela-dashboard" class="tela">
-    
-    <!-- CONTROLES GERAIS -->
+    <!-- CONTROLES GERAIS E FILTROS -->
     <div class="controles-topo-acompanhamento" style="margin-bottom: 10px; display: flex; flex-direction: column; gap: 10px;">
-        
-        <!-- BOTÕES DE FILTRO RÁPIDO NO DASHBOARD -->
         <div style="display: flex; gap: 5px; overflow-x: auto; padding-bottom: 2px;" class="tabs-header">
             <button class="tab-btn" style="padding: 8px 12px; font-size: 12px; border-radius: 8px; border: 1px solid var(--primary); color: var(--cor-texto) !important; opacity: 1;" onclick="setFiltroDataRapidoDash('hoje')">Hoje</button>
             <button class="tab-btn" style="padding: 8px 12px; font-size: 12px; border-radius: 8px; border: 1px solid var(--primary); color: var(--cor-texto) !important; opacity: 1;" onclick="setFiltroDataRapidoDash('ontem')">Ontem</button>
@@ -425,7 +438,6 @@
             <button class="tab-btn" style="padding: 8px 12px; font-size: 12px; border-radius: 8px; border: 1px solid var(--primary); color: var(--cor-texto) !important; opacity: 1;" onclick="setFiltroDataRapidoDash('mes')">Mês</button>
             <button class="tab-btn" style="padding: 8px 12px; font-size: 12px; border-radius: 8px; border: 1px solid var(--cor-secundaria); color: var(--cor-secundaria) !important; opacity: 1;" onclick="setFiltroDataRapidoDash('limpar')">Limpar</button>
         </div>
-
         <div style="display: flex; gap: 10px; align-items: center; width: 100%;">
             <div style="display: flex; gap: 10px; flex: 1;">
                 <input type="date" id="dash-data-inicio" class="seletor-mes" style="margin-bottom: 0; padding: 14px;" onchange="abrirDashboard(); carregarGraficosShare();">
@@ -434,8 +446,10 @@
             <button class="btn-sistema" onclick="forcarAtualizacaoDashboard()" style="margin-bottom: 0; width: auto; padding: 14px 18px; border-radius: 12px; background: var(--primary-gradiente);" title="Forçar Atualização"><i data-lucide="refresh-cw" id="icon-refresh-dash" style="margin: 0;"></i></button>
             <button class="btn-sistema" onclick="compartilharDashboard()" style="margin-bottom: 0; width: auto; padding: 14px 18px; border-radius: 12px; background: #8b5cf6;" title="Compartilhar Print"><i data-lucide="camera" style="margin: 0;"></i></button>
         </div>
-
-        <div style="display: flex; gap: 10px;" id="container-filtro-supervisor-dash">
+        <div style="display: flex; gap: 10px;" id="container-filtro-regional-dash">
+            <select id="filtro-regional-dash" onchange="mudouRegionalDash()"></select>
+        </div>
+        <div style="display: flex; gap: 10px; margin-top: 5px;" id="container-filtro-supervisor-dash">
             <select id="filtro-supervisor-dash" onchange="mudouSupervisorDash()"></select>
         </div>
         <div style="display: flex; gap: 10px; margin-top: 5px;" id="container-filtro-promotor-dash">
@@ -444,10 +458,11 @@
         </div>
     </div>
 
-    <!-- ABAS DO DASHBOARD ATUALIZADAS COM A ANÁLISE AVANÇADA -->
+    <!-- ABAS DO DASHBOARD -->
     <div class="tabs-header" style="margin-bottom: 20px;">
         <button class="tab-btn ativo dash-tab-btn" onclick="switchTab('dash-tab-oppo', 'dash-tab')"><i data-lucide="smartphone"></i> Resultados OPPO</button>
         <button class="tab-btn dash-tab-btn" onclick="switchTab('dash-tab-mercado', 'dash-tab'); carregarGraficosShare();"><i data-lucide="globe"></i> Visão de Mercado</button>
+        <button class="tab-btn dash-tab-btn" onclick="switchTab('dash-tab-desempenho', 'dash-tab')"><i data-lucide="trophy"></i> Desempenho</button>
         <button class="tab-btn dash-tab-btn" onclick="switchTab('dash-tab-avancada', 'dash-tab')"><i data-lucide="activity"></i> Análise Avançada</button>
     </div>
 
@@ -488,14 +503,14 @@
             <div style="width: 100%; overflow-x: auto; overflow-y: hidden;"><div id="wrap-graficoCoparticipacaoPromotores" style="position: relative; height: 350px; min-width: 100%;"><canvas id="graficoCoparticipacaoPromotores"></canvas></div></div>
         </div>
         <div style="background: var(--bg-card); padding: 20px; border-radius: 20px; margin-bottom: 25px; text-align: left; border: 1px solid var(--border-color);">
-            <h4 id="titulo-ranking-dash" style="margin-top:0; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; display: flex; align-items: center; gap: 8px;"><i data-lucide="award"></i> Ranking</h4>
+            <h4 id="titulo-ranking-dash" style="margin-top:0; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; display: flex; align-items: center; gap: 8px;"><i data-lucide="award"></i> Ranking Equipes</h4>
             <div id="lista-ranking-promotores" style="margin-top: 15px;">Carregando ranking...</div>
         </div>
         <div style="background: var(--bg-card); padding: 20px; border-radius: 20px; margin-bottom: 25px; border: 1px solid var(--border-color);">
             <h4 style="margin-top:0; text-align:left; display: flex; align-items: center; gap: 8px;"><i data-lucide="store"></i> Vendas por Loja</h4>
             <div style="width: 100%; overflow-x: auto; overflow-y: hidden;"><div id="wrap-graficoVendasLoja" style="position: relative; height: 350px; min-width: 100%;"><canvas id="graficoVendasLoja"></canvas></div></div>
         </div>
-    </div> <!-- FIM DA ABA OPPO -->
+    </div>
 
     <!-- INÍCIO DA ABA DE MERCADO -->
     <div id="dash-tab-mercado" class="dash-tab-content" style="display: none;">
@@ -504,23 +519,74 @@
             <div style="position: relative; height: 260px; width: 100%; display: flex; justify-content: center;"><canvas id="graficoMarketShare"></canvas></div>
             <div id="texto-resumo-share" style="margin-top: 15px; font-weight: bold; color: var(--primary);">Gráficos em breve...</div>
         </div>
-
         <div style="background: var(--bg-card); padding: 20px; border-radius: 20px; margin-bottom: 25px; text-align: left; border: 1px solid var(--border-color);">
             <h4 style="margin-top:0; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; display: flex; align-items: center; gap: 8px;"><i data-lucide="thermometer"></i> Temperatura das Lojas</h4>
             <div id="lista-temperatura-lojas" style="margin-top: 15px;">Carregando termômetro...</div>
         </div>
     </div>
 
-    <!-- INÍCIO DA NOVA ABA: ANÁLISE AVANÇADA -->
+    <!-- INÍCIO DA ABA DE DESEMPENHO (RANKING COMERCIAL) -->
+    <div id="dash-tab-desempenho" class="dash-tab-content" style="display: none;">
+        <div class="ranking-header-title">
+            <span class="ranking-trophy">🏆</span>
+            <div class="ranking-header-text">
+                <h2>Ranking de Desempenho Comercial</h2>
+                <p>Critério de Desempate: Vendas Foco/Premium | Relatório Gerencial</p>
+            </div>
+        </div>
+        <div class="ranking-kpi-grid">
+            <div class="rk-card border-gray">
+                <span class="rk-label">TOTAL DE VENDAS</span>
+                <div class="rk-value"><span id="rk-total-vendas">0</span> <small>UN</small></div>
+                <div class="rk-sub">Meta Total: <strong id="rk-meta-total">0 UN</strong></div>
+            </div>
+            <div class="rk-card border-green">
+                <span class="rk-label">ATINGIMENTO GLOBAL</span>
+                <div class="rk-value green-text" id="rk-atingimento-global">0%</div>
+                <div class="rk-sub">Média p/ Vendedor: <strong id="rk-media-vendedor">0.0 UN</strong></div>
+            </div>
+            <div class="rk-card border-blue">
+                <span class="rk-label">TOTAL FOCO/PREMIUM</span>
+                <div class="rk-value blue-text"><span id="rk-total-foco">0</span> <small>UN</small></div>
+                <div class="rk-sub">Penetração: <strong id="rk-penetracao-foco">0%</strong></div>
+            </div>
+            <div class="rk-card border-orange">
+                <span class="rk-label">LÍDER DE VENDAS</span>
+                <div class="rk-value orange-text"><i data-lucide="medal" class="lucide-sm"></i> <span id="rk-lider-nome">---</span></div>
+                <div class="rk-sub">Volume: <strong id="rk-lider-vendas">0 Vendas</strong></div>
+            </div>
+        </div>
+        <div class="ranking-table-wrapper">
+            <table class="ranking-table">
+                <thead>
+                    <tr>
+                        <th style="width: 50px;">POS.</th>
+                        <th style="text-align: left;">GUERREIRO(A)</th>
+                        <th>REDE / LOJAS</th>
+                        <th class="header-blue">VENDAS (1º)</th>
+                        <th class="header-green">FOCO (2º)</th>
+                        <th>META</th>
+                        <th>ATING.</th>
+                        <th>CAPA</th>
+                        <th>MKS</th>
+                        <th>MÉDIA/DIA</th>
+                        <th>PART. FOCO</th>
+                    </tr>
+                </thead>
+                <tbody id="ranking-table-body">
+                    <!-- Linhas injetadas pelo JS -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- INÍCIO DA ABA DE ANÁLISE AVANÇADA -->
     <div id="dash-tab-avancada" class="dash-tab-content" style="display: none;">
-        <!-- Gráfico de Horários de Pico (Mapa de Calor) -->
         <div style="background: var(--bg-card); padding: 20px; border-radius: 20px; margin-bottom: 25px; border: 1px solid var(--border-color);">
             <h4 style="margin-top:0; text-align:left; display: flex; align-items: center; gap: 8px;"><i data-lucide="clock"></i> Horários de Pico (Fluxo de Vendas)</h4>
             <p style="font-size: 12px; color: var(--cor-secundaria); text-align: left; margin-bottom: 15px;">Identifique os horários com maior volume de vendas da equipe no período selecionado.</p>
             <div style="position: relative; height: 280px; width: 100%;"><canvas id="graficoHorariosPico"></canvas></div>
         </div>
-
-        <!-- Gráfico de Projeção Preditiva (Pace Visual) -->
         <div style="background: var(--bg-card); padding: 20px; border-radius: 20px; margin-bottom: 25px; border: 1px solid var(--border-color);">
             <h4 style="margin-top:0; text-align:left; display: flex; align-items: center; gap: 8px;"><i data-lucide="trending-up"></i> Projeção de Fechamento (Pace vs Meta)</h4>
             <p style="font-size: 12px; color: var(--cor-secundaria); text-align: left; margin-bottom: 15px;">Compara o ritmo atual de vendas diárias com o volume necessário para atingir 100% da meta.</p>
@@ -535,22 +601,35 @@
         <button class="tab-btn admin-tab-btn" onclick="switchTab('admin-tab-comissao', 'admin-tab')"><i data-lucide="dollar-sign"></i> Regras de Comissão</button>
         <button class="tab-btn admin-tab-btn" onclick="switchTab('admin-tab-global', 'admin-tab')"><i data-lucide="smartphone"></i> Modelos</button>
     </div>
+    
     <div id="admin-tab-equipe" class="admin-tab-content" style="display: block;">
         <div class="bloco-admin" id="bloco-lista-supervisores" style="background: var(--bg-card); border-radius: 20px; border: 1px solid var(--border-color); padding:20px;">
             <h4><i data-lucide="network"></i> Regiões e Equipes</h4>
-            <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-                <select id="filtro-cargo-admin" onchange="renderizarAdminUsuarios()" style="flex: 1; padding: 10px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-input); color: var(--cor-texto);">
+            
+            <!-- BARRA DE FILTROS COM A HIERARQUIA -->
+            <div style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
+                <select id="filtro-cargo-admin" onchange="renderizarAdminUsuarios()" style="flex: 1; min-width: 130px; padding: 10px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-input); color: var(--cor-texto);">
                     <option value="todos">Todos os Cargos</option>
                     <option value="promotor">Promotores</option>
                     <option value="supervisor">Supervisores</option>
                     <option value="regional">Regionais/Gestores</option>
                 </select>
-                <input type="text" id="busca-admin" placeholder="Buscar usuário..." onkeyup="renderizarAdminUsuarios()" style="flex: 2; padding: 10px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-input); color: var(--cor-texto);">
+                <select id="filtro-hierarquia-admin" onchange="renderizarAdminUsuarios()" style="flex: 1.5; min-width: 150px; padding: 10px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-input); color: var(--cor-texto); display: none;">
+                    <!-- Preenchido pelo JS -->
+                </select>
+                <input type="text" id="busca-admin" placeholder="Buscar usuário..." onkeyup="renderizarAdminUsuarios()" style="flex: 2; min-width: 150px; padding: 10px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-input); color: var(--cor-texto);">
             </div>
+            
             <div id="lista-admin-supervisores" style="max-height: 400px; overflow-y: auto; margin-bottom: 15px;"></div>
+            
             <div id="bloco-criar-gestor" style="display: none; border-top: 1px dashed var(--border-color); padding-top: 20px; margin-top: 15px;">
-                <label style="font-size: 13px; font-weight: bold; color: #10b981; display: flex; align-items: center; gap: 6px; margin-bottom: 12px;"><i data-lucide="user-plus" class="lucide-sm"></i> Adicionar Novo Gestor/Supervisor:</label>
-                <div class="input-admin-row"><input type="text" id="admin-gs-login" placeholder="Login"><input type="text" id="admin-gs-nome" placeholder="Nome"></div>
+                <label style="font-size: 13px; font-weight: bold; color: #10b981; display: flex; align-items: center; gap: 6px; margin-bottom: 12px;">
+                    <i data-lucide="user-plus" class="lucide-sm"></i> Adicionar Novo Gestor/Supervisor:
+                </label>
+                <div class="input-admin-row">
+                    <input type="text" id="admin-gs-login" placeholder="Login">
+                    <input type="text" id="admin-gs-nome" placeholder="Nome">
+                </div>
                 <div class="input-admin-row">
                     <input type="text" id="admin-gs-senha" placeholder="Senha">
                     <select id="admin-gs-cargo" onchange="verificarAdminCargo(this.value)">
@@ -559,14 +638,26 @@
                         <option value="gestor">Diretor Geral</option>
                     </select>
                 </div>
-                <div class="input-admin-row" id="container-admin-regiao">
-                    <select id="admin-gs-regiao-select" onchange="verificarNovaRegiao(this.value)"><option value="">Carregando regiões...</option></select>
-                    <input type="text" id="admin-gs-regiao-input" placeholder="Digite a nova região (Ex: SP)" style="display:none; margin-top:10px;">
+                <div class="input-admin-row" id="container-admin-regiao" style="display: none; flex-direction: column; text-align: left; margin-bottom: 15px;">
+                    <label style="font-size: 11px; font-weight: bold; color: var(--cor-secundaria); margin-bottom: 4px;">Defina a Região deste Regional:</label>
+                    <select id="admin-gs-regiao-select" onchange="verificarNovaRegiao(this.value)" style="width: 100%; margin: 0; padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-input); color: var(--cor-texto);">
+                        <option value="">Carregando regiões...</option>
+                    </select>
+                    <input type="text" id="admin-gs-regiao-input" placeholder="Digite a nova região (Ex: SP)" style="display:none; margin-top:10px; width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-input); color: var(--cor-texto);">
                 </div>
-                <button class="btn-acao btn-enviar" style="width: 100%; padding:14px; border-radius:12px; font-size:15px; border:none;" onclick="adminAddGestorSup()"><i data-lucide="check" style="margin-right:6px;"></i> Criar Perfil</button>
+                <div class="input-admin-row" id="container-admin-vinculo" style="display: flex; flex-direction: column; text-align: left; margin-bottom: 15px;">
+                    <label style="font-size: 11px; font-weight: bold; color: var(--cor-secundaria); margin-bottom: 4px;">Vincular à equipe do Regional:</label>
+                    <select id="admin-gs-vinculo-select" style="width: 100%; margin: 0; padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-input); color: var(--cor-texto);">
+                        <!-- Preenchido pelo Javascript -->
+                    </select>
+                </div>
+                <button class="btn-acao btn-enviar" style="width: 100%; padding:14px; border-radius:12px; font-size:15px; border:none;" onclick="adminAddGestorSup()">
+                    <i data-lucide="check" style="margin-right:6px;"></i> Criar Perfil
+                </button>
             </div>
         </div>
     </div>
+
     <div id="admin-tab-comissao" class="admin-tab-content" style="display: none;">
         <div class="bloco-admin" id="bloco-admin-foco" style="display: none; background: var(--bg-card); border-radius: 20px; border: 1px solid var(--border-color); padding:20px;">
             <h4><i data-lucide="star"></i> Aparelhos Foco / Coparticipação</h4>
@@ -581,6 +672,7 @@
             <div id="admin-foco-container" style="text-align: left;"></div>
         </div>
     </div>
+
     <div id="admin-tab-global" class="admin-tab-content" style="display: none;">
         <div class="bloco-admin" style="background: var(--bg-card); border-radius: 20px; border: 1px solid var(--border-color); padding:20px;">
             <h4><i data-lucide="smartphone"></i> Cadastro de Novos Modelos (Global)</h4>
@@ -593,7 +685,7 @@
 
 </div>
 
-<!-- INSERIMOS O SCRIPT OFICIAL DO SUPABASE AQUI ANTES DO SEU SCRIPT LOCAL -->
+<!-- SCRIPT OFICIAL DO SUPABASE AQUI -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <!-- CHAMANDO OS SCRIPTS LOCAIS SEPARADOS -->
