@@ -617,9 +617,36 @@ function forcarAtualizacaoDashboard() {
     if(typeof carregarGraficosShare === 'function') carregarGraficosShare(); 
 }
 
+// ==========================================
+// ABRIR DASHBOARD (COM TRAVA GERENCIAL PARA PROMOTOR)
+// ==========================================
 function abrirDashboard() { 
     mudarTela('tela-dashboard'); 
     window.confettiDisparado = false; 
+
+    // ==========================================
+    // TRAVA GERENCIAL: ESCONDE ABAS DOS PROMOTORES
+    // ==========================================
+    let btnDesempenho = document.getElementById('btn-tab-desempenho');
+    let btnAvancada = document.getElementById('btn-tab-avancada');
+    let btnOppo = document.getElementById('btn-tab-oppo');
+
+    if (usuarioLogado.cargo === "promotor") {
+        if (btnDesempenho) btnDesempenho.style.display = "none";
+        if (btnAvancada) btnAvancada.style.display = "none";
+        
+        // Garante que o promotor caia sempre na primeira aba (Resultados) e nunca numa aba invisível
+        switchTab('dash-tab-oppo', 'dash-tab');
+        if (btnOppo) {
+            document.querySelectorAll('.dash-tab-btn').forEach(b => b.classList.remove('ativo'));
+            btnOppo.classList.add('ativo');
+        }
+    } else {
+        // Se for Supervisor, Regional ou Gestor, mostra tudo
+        if (btnDesempenho) btnDesempenho.style.display = "";
+        if (btnAvancada) btnAvancada.style.display = "";
+    }
+    // ==========================================
 
     let cReg = document.getElementById('container-filtro-regional-dash');
     let cSup = document.getElementById('container-filtro-supervisor-dash');
@@ -686,6 +713,57 @@ function abrirDashboard() {
         console.error(e); document.getElementById("total-vendas-geral").innerText = "Erro!"; 
         if (e.message && (e.message.includes('fetch') || e.message.includes('network'))) mostrarBotaoReconexao(); else mostrarToast("Erro nos gráficos.", "erro");
     }).finally(() => { let icone = document.getElementById('icon-refresh-dash'); if(icone) icone.style.animation = "none"; loadIcons(); }); 
+}
+
+// ==========================================
+// MODAL EXTRATO DE COMISSÃO
+// ==========================================
+function abrirExtratoComissao() { 
+    let elComissao = document.getElementById("total-comissao-geral"); 
+    let iconeOlho = document.getElementById("icone-olho-comissao"); 
+    
+    if (elComissao.innerText === "R$ ****") { 
+        elComissao.innerText = elComissao.dataset.valor || "R$ 0,00"; 
+        iconeOlho.innerHTML = '<i data-lucide="eye-off" style="margin:0;"></i>'; 
+        loadIcons(); 
+    } 
+
+    let html = '';
+    let totalExtrato = 0;
+    let map = window.extratoComissaoAtual || {};
+
+    for(let key in map) {
+        let item = map[key];
+        let titulo = key;
+        let sub = item.isCampanha ? `${item.qtd}x Atingimentos Bônus` : `${item.qtd} un x R$ ${item.valorUnit.toFixed(2)}`;
+        let totForm = `R$ ${item.total.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+        totalExtrato += item.total;
+
+        html += `<div style="display:flex; justify-content:space-between; align-items:center; padding: 12px 0; border-bottom: 1px dashed var(--border-color);">
+                    <div style="text-align: left;">
+                        <strong style="font-size: 13px; color: var(--cor-texto); display:block; margin-bottom: 2px;">${titulo}</strong>
+                        <span style="font-size: 11px; color: var(--cor-secundaria);">${sub}</span>
+                    </div>
+                    <strong style="font-size: 14px; color: #10b981;">${totForm}</strong>
+                 </div>`;
+    }
+
+    if(html === '') {
+        html = `<div class='mensagem-vazia'>Nenhuma comissão gerada neste período.</div>`;
+    } else {
+        html += `<div style="display:flex; justify-content:space-between; align-items:center; padding-top: 15px; margin-top: 10px;">
+                    <strong style="font-size: 16px; color: var(--cor-texto);">TOTAL EXTRATO</strong>
+                    <strong style="font-size: 18px; color: var(--primary);">R$ ${totalExtrato.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2})}</strong>
+                 </div>`;
+    }
+
+    document.getElementById('lista-extrato-comissao').innerHTML = html;
+    document.getElementById('modal-extrato-comissao').classList.add('ativo');
+    loadIcons();
+}
+
+function fecharModalExtrato() { 
+    document.getElementById('modal-extrato-comissao').classList.remove('ativo'); 
 }
 
 // LOGICA BLINDADA DE FILTROS EM CASCATA
@@ -789,11 +867,13 @@ window.mudouPromotorDash = function() { atualizarFiltroLojaDash(); abrirDashboar
 function toggleComissao() { let elComissao = document.getElementById("total-comissao-geral"); let iconeOlho = document.getElementById("icone-olho-comissao"); if (elComissao.innerText === "R$ ****") { elComissao.innerText = elComissao.dataset.valor || "R$ 0,00"; iconeOlho.innerHTML = '<i data-lucide="eye-off" style="margin:0;"></i>'; } else { elComissao.innerText = "R$ ****"; iconeOlho.innerHTML = '<i data-lucide="eye" style="margin:0;"></i>'; } loadIcons(); }
 function isCampaignActiveInMonth(startStr, endStr, mesSelecionado) { return true; }
 
+// ==========================================
+// CÁLCULOS DO DASHBOARD E MATEMÁTICA DO EXTRATO
+// ==========================================
 function gerarGraficos(dadosVendas) {
     if (!dadosVendas) dadosVendas = []; 
     let totalGeral = 0; let vendasPorLoja = {}; let vendasPorModelo = {}; let metricas = {}; let modelosFocoVendidos = {}; let rankingPorLoja = {}; 
     
-    // DEFINIÇÃO DO FOCO DA HIERARQUIA
     let regiaoFoco = "todos"; let supervisorFoco = "todos"; let promotorFoco = "todos"; let lojaFoco = "todas";
 
     let elReg = document.getElementById('filtro-regional-dash'); if (elReg && elReg.parentElement.style.display !== "none") regiaoFoco = elReg.value; if (usuarioLogado.cargo === "regional") regiaoFoco = usuarioLogado.id;
@@ -804,7 +884,6 @@ function gerarGraficos(dadosVendas) {
     let agrupamento = (supervisorFoco === "todos") ? "supervisor" : "promotor"; 
     let visualizarVendedores = (promotorFoco !== "todos" || lojaFoco !== "todas"); 
 
-    // 1. ISOLA PROMOTORES VALIDOS DENTRO DA PIRÂMIDE
     let promotoresEscopo = new Set();
     for (let k in bancoUsuarios) {
         if (bancoUsuarios[k].cargo === "promotor") {
@@ -822,30 +901,21 @@ function gerarGraficos(dadosVendas) {
         }
     }
 
-    // 2. CONSTRÓI AS MÉTRICAS BASES
     promotoresEscopo.forEach(k => {
         let supDoPromotor = bancoUsuarios[k].criadoPor;
         let metaIndPromotor = bancoUsuarios[k].meta || 0; 
         let metaPremPromotor = 0;
         
-        if (bancoUsuarios[k].metaPremiumAbs !== undefined && bancoUsuarios[k].metaPremiumAbs !== "") {
-            metaPremPromotor = Number(bancoUsuarios[k].metaPremiumAbs);
-        } else {
-            let taxaSup = taxasCoparticipacao[supDoPromotor] || taxasCoparticipacao["geral"] || 25; 
-            metaPremPromotor = Math.round(metaIndPromotor * (taxaSup / 100)); 
-        }
+        if (bancoUsuarios[k].metaPremiumAbs !== undefined && bancoUsuarios[k].metaPremiumAbs !== "") { metaPremPromotor = Number(bancoUsuarios[k].metaPremiumAbs); } 
+        else { let taxaSup = taxasCoparticipacao[supDoPromotor] || taxasCoparticipacao["geral"] || 25; metaPremPromotor = Math.round(metaIndPromotor * (taxaSup / 100)); }
 
         let chaveAgrupamento = agrupamento === "supervisor" ? supDoPromotor : k;
         let nomeAgrupamento = bancoUsuarios[chaveAgrupamento] ? (bancoUsuarios[chaveAgrupamento].nome || chaveAgrupamento) : chaveAgrupamento;
 
-        if (!metricas[nomeAgrupamento]) {
-             metricas[nomeAgrupamento] = { login: chaveAgrupamento, nome: nomeAgrupamento, metaPremium: 0, metaIndividual: 0, realizadoPremium: 0, realizadoGeral: 0, modelosPremiumVendidos: {}, modelosVendidosGeral: {}, comissaoAcumulada: 0, metasLinhas: bancoUsuarios[chaveAgrupamento] ? bancoUsuarios[chaveAgrupamento].metasLinhas || [] : [], realizadoLinhas: {} };
-        }
-        metricas[nomeAgrupamento].metaPremium += metaPremPromotor;
-        metricas[nomeAgrupamento].metaIndividual += metaIndPromotor;
+        if (!metricas[nomeAgrupamento]) { metricas[nomeAgrupamento] = { login: chaveAgrupamento, nome: nomeAgrupamento, metaPremium: 0, metaIndividual: 0, realizadoPremium: 0, realizadoGeral: 0, modelosPremiumVendidos: {}, modelosVendidosGeral: {}, comissaoAcumulada: 0, metasLinhas: bancoUsuarios[chaveAgrupamento] ? bancoUsuarios[chaveAgrupamento].metasLinhas || [] : [], realizadoLinhas: {} }; }
+        metricas[nomeAgrupamento].metaPremium += metaPremPromotor; metricas[nomeAgrupamento].metaIndividual += metaIndPromotor;
     });
 
-    // 3. PROCESSA AS VENDAS
     dadosVendas.forEach(row => {
         let pKey = row.promotor_login; 
         if (!promotoresEscopo.has(pKey)) return; 
@@ -894,8 +964,9 @@ function gerarGraficos(dadosVendas) {
         });
     });
 
-    // CÁLCULO FINANCEIRO (COMISSÕES E BÔNUS)
     let mesFiltro = ""; 
+    window.extratoComissaoAtual = {}; // Reseta o extrato atual
+
     Object.values(metricas).forEach(m => {
         let comissaoUser = 0; let supkey = m.login; 
         if (bancoUsuarios[m.login] && bancoUsuarios[m.login].cargo === "promotor") { supkey = bancoUsuarios[m.login].criadoPor; }
@@ -911,13 +982,20 @@ function gerarGraficos(dadosVendas) {
 
         for(let modChave in m.modelosVendidosGeral) { 
             let qtdMod = m.modelosVendidosGeral[modChave]; let cfg = aparelhosCfg[modChave] || { tipo: 'nenhum' }; 
-            if (cfg.tipo === 'fixo') { comissaoUser += (qtdMod * (Number(cfg.valorFixo) || 0)); } 
+            
+            if (cfg.tipo === 'fixo') { 
+                let valFixo = Number(cfg.valorFixo) || 0; let ganho = qtdMod * valFixo; comissaoUser += ganho; 
+                if (ganho > 0) { let k = `${modChave.toUpperCase()} (Fixo)`; if(!window.extratoComissaoAtual[k]) window.extratoComissaoAtual[k] = { qtd:0, valorUnit: valFixo, total:0, isCampanha: false }; window.extratoComissaoAtual[k].qtd += qtdMod; window.extratoComissaoAtual[k].total += ganho; }
+            } 
             else if (cfg.tipo === 'grupo' && cfg.grupoId) {
                 let g = grupos.find(x => x.id === cfg.grupoId);
                 if (g && cfg.valores) {
                     let volumeTotalGrupo = volumePorGrupo[cfg.grupoId] || 0; let nivelAlcancadoIdx = null; let maiorMeta = -1;
                     g.niveis.forEach((nv, idx) => { if (volumeTotalGrupo >= Number(nv.meta) && Number(nv.meta) >= maiorMeta) { nivelAlcancadoIdx = idx; maiorMeta = Number(nv.meta); } });
-                    if (nivelAlcancadoIdx !== null) { let payout = Number(cfg.valores[nivelAlcancadoIdx]) || 0; comissaoUser += (qtdMod * payout); }
+                    if (nivelAlcancadoIdx !== null) { 
+                        let payout = Number(cfg.valores[nivelAlcancadoIdx]) || 0; let ganho = qtdMod * payout; comissaoUser += ganho; 
+                        if(ganho > 0) { let k = `${modChave.toUpperCase()} (Cat: ${g.nome})`; if(!window.extratoComissaoAtual[k]) window.extratoComissaoAtual[k] = { qtd:0, valorUnit: payout, total:0, isCampanha: false }; window.extratoComissaoAtual[k].qtd += qtdMod; window.extratoComissaoAtual[k].total += ganho; }
+                    }
                 }
             } 
             else if (cfg.tipo === undefined && (cfg.comissionado === true || cfg.comissionado === 'true')) {
@@ -925,7 +1003,8 @@ function gerarGraficos(dadosVendas) {
                 let nivelAlcancado = 'l1'; let maiorMeta = -1; 
                 niveisGlobais.forEach(nv => { let metaParaNivel = (cfg[nv.id + '_meta'] !== undefined && cfg[nv.id + '_meta'] !== "") ? Number(cfg[nv.id + '_meta']) : nv.meta; if (m.realizadoGeral >= metaParaNivel && metaParaNivel >= maiorMeta) { nivelAlcancado = nv.id; maiorMeta = metaParaNivel; } }); 
                 let payout = 0; if (cfg[nivelAlcancado] !== undefined && cfg[nivelAlcancado] !== "") { payout = Number(cfg[nivelAlcancado]); } else if (cfg['l1'] !== undefined && cfg['l1'] !== "") { payout = Number(cfg['l1']); } 
-                comissaoUser += (qtdMod * payout);
+                let ganho = qtdMod * payout; comissaoUser += ganho;
+                if(ganho > 0) { let k = `${modChave.toUpperCase()} (Global)`; if(!window.extratoComissaoAtual[k]) window.extratoComissaoAtual[k] = { qtd:0, valorUnit: payout, total:0, isCampanha: false }; window.extratoComissaoAtual[k].qtd += qtdMod; window.extratoComissaoAtual[k].total += ganho; }
             }
         }
 
@@ -933,7 +1012,10 @@ function gerarGraficos(dadosVendas) {
             if (isCampaignActiveInMonth(camp.dataInicio, camp.dataFim, mesFiltro)) { 
                 if (camp.promotorAlvo && camp.promotorAlvo !== 'todos' && camp.promotorAlvo !== m.login) { return; } 
                 let qtdParaBater = 0; if (camp.aparelho === 'todos') { qtdParaBater = m.realizadoPremium; } else { qtdParaBater = m.modelosVendidosGeral[camp.aparelho] || 0; } 
-                if (qtdParaBater >= Number(camp.qtdMinima)) { comissaoUser += (qtdParaBater * Number(camp.bonus)); } 
+                if (qtdParaBater >= Number(camp.qtdMinima)) { 
+                    let ganho = qtdParaBater * Number(camp.bonus); comissaoUser += ganho; 
+                    if(ganho > 0) { let k = `🎯 Bônus: ${camp.aparelho.toUpperCase()}`; if(!window.extratoComissaoAtual[k]) window.extratoComissaoAtual[k] = { qtd:0, valorUnit: Number(camp.bonus), total:0, isCampanha: true }; window.extratoComissaoAtual[k].qtd += qtdParaBater; window.extratoComissaoAtual[k].total += ganho; }
+                } 
             } 
         });
         m.comissaoAcumulada = comissaoUser;
@@ -1016,7 +1098,6 @@ function gerarGraficos(dadosVendas) {
             }
         });
 
-        // 🟢 FIX DO GRÁFICO DE PICO: Espaço no topo garantido para os labels não cortarem!
         let maxPicoValor = Math.max(...Object.values(horasContador));
         const ctxHorarios = document.getElementById('graficoHorariosPico').getContext('2d');
         chartHorariosPico = new Chart(ctxHorarios, { 
@@ -1039,7 +1120,6 @@ function gerarGraficos(dadosVendas) {
         }, 500);
     } catch(errG) { console.error("Erro interno nos gráficos:", errG); }
 }
-
 function renderizarRankingComercialDashboard(metricas, totalGeral, diasPassados) {
     let tbody = document.getElementById('ranking-table-body');
     if (!tbody) return;
