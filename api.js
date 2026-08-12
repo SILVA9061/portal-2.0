@@ -30,6 +30,7 @@ const fallbackEmojis = {};
 const fallbackPremium = { "geral": {} };
 
 // 4. Função Mestre de Inicialização (Versão Final 100% Nuvem)
+// 4. Função Mestre de Inicialização (Versão Final 100% Nuvem com Blindagem de Array)
 async function inicializarAPI() {
     try {
         console.log("Conectando ao Supabase e baixando dados...");
@@ -42,16 +43,32 @@ async function inicializarAPI() {
         const { data: dbLojas, error: errLoj } = await supabaseClient.from('lojas_config').select('*');
         if (errLoj) throw errLoj;
 
-        // 3. SELECT nas configurações globais (Emojis, Comissões, etc)
+        // 3. SELECT nas configurações globais
         const { data: dbConfig } = await supabaseClient.from('configuracoes_globais').select('*').eq('id', 'padrao').single();
 
         // Monta os objetos na memória
         bancoUsuarios = {};
         if (dbUsuarios) {
             dbUsuarios.forEach(u => {
+                // ==========================================
+                // 🛑 DESEMPACOTADOR INTELIGENTE DE LOJAS
+                // ==========================================
+                let arrayLojasLimpo = [];
+                if (Array.isArray(u.lojas_permitidas)) {
+                    // Se o Supabase guardou como um texto único devido à migração
+                    if (u.lojas_permitidas.length === 1 && typeof u.lojas_permitidas[0] === 'string' && u.lojas_permitidas[0].includes('[')) {
+                        try { arrayLojasLimpo = JSON.parse(u.lojas_permitidas[0]); } catch(e) { arrayLojasLimpo = u.lojas_permitidas; }
+                    } else {
+                        arrayLojasLimpo = u.lojas_permitidas;
+                    }
+                } else if (typeof u.lojas_permitidas === 'string') {
+                    try { arrayLojasLimpo = JSON.parse(u.lojas_permitidas); } catch(e) { arrayLojasLimpo = [u.lojas_permitidas]; }
+                }
+
                 bancoUsuarios[u.login] = {
                     nome: u.nome, senha: u.senha, cargo: u.cargo, regiao: u.regiao, 
-                    meta: u.meta, criadoPor: u.criado_por, lojasPermitidas: u.lojas_permitidas || [],
+                    meta: u.meta, criadoPor: u.criado_por, 
+                    lojasPermitidas: arrayLojasLimpo, // Passa o array perfeitamente separado
                     permissoes: { vendas: true, acomp: true, estoque_ver: true, estoque_editar: true } 
                 };
             });
@@ -60,7 +77,25 @@ async function inicializarAPI() {
         lojasConfig = {};
         if (dbLojas) {
             dbLojas.forEach(l => {
-                lojasConfig[l.nome_loja] = { supervisor: l.supervisor_login, capa: l.capa, vendedores: l.vendedores || [] };
+                // ==========================================
+                // 🛑 DESEMPACOTADOR INTELIGENTE DE VENDEDORES
+                // ==========================================
+                let arrayVendsLimpo = [];
+                if (Array.isArray(l.vendedores)) {
+                    if (l.vendedores.length === 1 && typeof l.vendedores[0] === 'string' && l.vendedores[0].includes('[')) {
+                        try { arrayVendsLimpo = JSON.parse(l.vendedores[0]); } catch(e) { arrayVendsLimpo = l.vendedores; }
+                    } else {
+                        arrayVendsLimpo = l.vendedores;
+                    }
+                } else if (typeof l.vendedores === 'string') {
+                    try { arrayVendsLimpo = JSON.parse(l.vendedores); } catch(e) { arrayVendsLimpo = [l.vendedores]; }
+                }
+
+                lojasConfig[l.nome_loja] = { 
+                    supervisor: l.supervisor_login, 
+                    capa: l.capa, 
+                    vendedores: arrayVendsLimpo // Vendedores separados
+                };
             });
         }
 

@@ -868,7 +868,7 @@ function toggleComissao() { let elComissao = document.getElementById("total-comi
 function isCampaignActiveInMonth(startStr, endStr, mesSelecionado) { return true; }
 
 // ==========================================
-// CÁLCULOS DO DASHBOARD E MATEMÁTICA DO EXTRATO
+// CÁLCULOS DO DASHBOARD, MATEMÁTICA E EXTRATO
 // ==========================================
 function gerarGraficos(dadosVendas) {
     if (!dadosVendas) dadosVendas = []; 
@@ -918,10 +918,37 @@ function gerarGraficos(dadosVendas) {
 
     dadosVendas.forEach(row => {
         let pKey = row.promotor_login; 
-        if (!promotoresEscopo.has(pKey)) return; 
+        let loja = (row.loja || "Outras").trim(); 
 
-        let loja = row.loja || "Outras"; 
-        if (lojaFoco !== "todas" && loja !== lojaFoco) return;
+        // ==========================================
+        // 🟢 FIX: REDIRECIONAMENTO DE VENDAS (SUPERVISOR -> PROMOTOR)
+        // Se quem lançou a venda NÃO for promotor (Supervisor/Diretor), o sistema
+        // transfere a venda automaticamente para o promotor que é dono dessa loja.
+        // ==========================================
+        let usuarioVenda = bancoUsuarios[pKey];
+        if (!usuarioVenda || usuarioVenda.cargo !== "promotor") {
+            let donoDaLoja = Object.keys(bancoUsuarios).find(k => {
+                let u = bancoUsuarios[k];
+                return u.cargo === "promotor" && 
+                       u.lojasPermitidas && 
+                       u.lojasPermitidas.some(l => l.trim().toLowerCase() === loja.toLowerCase());
+            });
+            // Se achou o dono, repassa a venda pra ele ser pontuado e comissionado
+            if (donoDaLoja) {
+                pKey = donoDaLoja;
+            }
+        }
+
+        if (!promotoresEscopo.has(pKey)) return; 
+        
+        // 🟢 FILTRO TOLERANTE DE LOJAS
+        if (lojaFoco !== "todas") {
+            let lojaFormatada = loja.toLowerCase().replace(/\s+/g, ' ').trim();
+            let focoFormatado = lojaFoco.toLowerCase().replace(/\s+/g, ' ').trim();
+            if (lojaFormatada !== focoFormatado && !lojaFormatada.includes(focoFormatado) && !focoFormatado.includes(lojaFormatada)) {
+                return;
+            }
+        }
         
         let match = (row.Vendedor || "").match(/^\[(.*?)\]\s*(.*)$/); let vendNome = match ? match[2] : row.Vendedor;
         let lista = (row.Aparelhos || "").split("||").map(x => x.trim()).filter(x => x !== ""); let qtd = lista.length; 
@@ -965,7 +992,7 @@ function gerarGraficos(dadosVendas) {
     });
 
     let mesFiltro = ""; 
-    window.extratoComissaoAtual = {}; // Reseta o extrato atual
+    window.extratoComissaoAtual = {}; 
 
     Object.values(metricas).forEach(m => {
         let comissaoUser = 0; let supkey = m.login; 
