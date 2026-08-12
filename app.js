@@ -1164,7 +1164,10 @@ function renderizarRankingComercialDashboard(metricas, totalGeral, diasPassados)
         if (pos === 1) posHtml = `<span class="rk-medal ouro">1</span>`; else if (pos === 2) posHtml = `<span class="rk-medal prata">2</span>`; else if (pos === 3) posHtml = `<span class="rk-medal bronze">3</span>`;
 
         let strLojas = "N/A"; let capaTotal = 0; let userObj = bancoUsuarios[m.login];
-        if (userObj && userObj.lojasPermitidas && userObj.lojasPermitidas.length > 0) { strLojas = userObj.lojasPermitidas.join(", "); userObj.lojasPermitidas.forEach(loja => { if(lojasConfig[loja] && lojasConfig[loja].capa) capaTotal += lojasConfig[loja].capa; }); }
+        if (userObj && userObj.lojasPermitidas && userObj.lojasPermitidas.length > 0) { 
+            strLojas = userObj.lojasPermitidas.join(", "); 
+            userObj.lojasPermitidas.forEach(loja => { if(lojasConfig[loja] && lojasConfig[loja].capa) capaTotal += lojasConfig[loja].capa; }); 
+        }
 
         let atingimento = m.metaIndividual > 0 ? ((m.realizadoGeral / m.metaIndividual) * 100).toFixed(1) : "0.0";
         let classeAting = parseFloat(atingimento) >= 100 ? "ating-bom" : "ating-ruim";
@@ -1172,7 +1175,20 @@ function renderizarRankingComercialDashboard(metricas, totalGeral, diasPassados)
         let mediaDia = diasPassados > 0 ? (m.realizadoGeral / diasPassados).toFixed(1) : "0.0";
         let partFoco = m.realizadoGeral > 0 ? ((m.realizadoPremium / m.realizadoGeral) * 100).toFixed(1) : "0.0";
 
-        htmlLinhas += `<tr><td>${posHtml}</td><td style="text-align: left; font-weight: 800; color: #f8fafc;">${m.nome}</td><td style="color: #94a3b8; font-size: 11px; max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${strLojas}">${strLojas}</td><td style="font-size: 16px; font-weight: 900; color: #f8fafc; background-color: rgba(30, 58, 138, 0.2);">${m.realizadoGeral}</td><td style="font-size: 16px; font-weight: 900; color: #10b981; background-color: rgba(6, 78, 59, 0.2);">${m.realizadoPremium}</td><td>${m.metaIndividual}</td><td class="${classeAting}">${atingimento}%</td><td>${capaTotal}</td><td>${mks}%</td><td>${mediaDia}</td><td>${partFoco}%</td></tr>`;
+        // 🟢 CORREÇÃO: Removido o corte de texto (ellipsis) e adicionado quebra de linha (white-space: normal; line-height: 1.4)
+        htmlLinhas += `<tr>
+            <td>${posHtml}</td>
+            <td style="text-align: left; font-weight: 800; color: #f8fafc;">${m.nome}</td>
+            <td style="color: #94a3b8; font-size: 11px; min-width: 150px; max-width: 250px; white-space: normal; line-height: 1.4; padding: 8px;" title="${strLojas}">${strLojas}</td>
+            <td style="font-size: 16px; font-weight: 900; color: #f8fafc; background-color: rgba(30, 58, 138, 0.2);">${m.realizadoGeral}</td>
+            <td style="font-size: 16px; font-weight: 900; color: #10b981; background-color: rgba(6, 78, 59, 0.2);">${m.realizadoPremium}</td>
+            <td>${m.metaIndividual}</td>
+            <td class="${classeAting}">${atingimento}%</td>
+            <td>${capaTotal}</td>
+            <td>${mks}%</td>
+            <td>${mediaDia}</td>
+            <td>${partFoco}%</td>
+        </tr>`;
     });
 
     tbody.innerHTML = htmlLinhas || "<tr><td colspan='11'>Sem dados no período</td></tr>";

@@ -301,3 +301,30 @@ body.dark-mode .logo-rodape-login { filter: invert(1) brightness(2); opacity: 0.
 .rk-medal.ouro { background: linear-gradient(135deg, #fbbf24 0%, #d97706 100%); }
 .rk-medal.prata { background: linear-gradient(135deg, #cbd5e1 0%, #94a3b8 100%); }
 .rk-medal.bronze { background: linear-gradient(135deg, #f87171 0%, #b91c1c 100%); }
+/* ==========================================
+   AJUSTE DE LARGURA DA TABELA DE RANKING
+========================================== */
+
+/* Garante que a tabela use 100% do espaço do card sem quebrar layout */
+.ranking-table {
+    width: 100%;
+    table-layout: auto;
+}
+
+/* Dá espaço de sobra e largura confortável para a coluna de Lojas */
+.ranking-table th:nth-child(3),
+.ranking-table td:nth-child(3) {
+    min-width: 220px;
+    max-width: 320px;
+    white-space: normal !important;
+    word-break: break-word;
+    text-align: left;
+    padding-left: 12px;
+}
+
+/* Compacta levemente as colunas de números para sobrar espaço para as lojas */
+.ranking-table th, 
+.ranking-table td {
+    padding: 10px 6px;
+    font-size: 13px;
+}
