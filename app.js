@@ -1,6 +1,6 @@
 // ==========================================
-// app.js - PARTE 1 a 3 DE 10
-// Variáveis Globais, Interface e Navegação
+// app.js - VERSÃO COMPLETA E DEFINITIVA
+// Portal OPPO - 100% Nuvem, Híbrido, Auto-Save e BI
 // ==========================================
 
 let lojaAtual = ""; 
@@ -15,13 +15,15 @@ let chartCoparticipacao = null;
 let chartCapa = null; 
 let chartLojas = null; 
 let chartModelos = null;
+let chartHorariosPico = null;
+let chartPaceVisual = null;
 let chartShareGlobal = null;
 let supervisorGerenciadoAtual = null; 
-let mostruariosGlobais = JSON.parse(localStorage.getItem('mostruariosGlobais')) || {}; 
 let tipoHistoricoAtual = 'geral'; 
 let mostruarioEmEdicao = null; 
 let vendaParaCancelar = null;
 
+// Polyfill para NodeList
 if (window.NodeList && !NodeList.prototype.forEach) { NodeList.prototype.forEach = Array.prototype.forEach; }
 
 window.addEventListener('offline', () => { mostrarToast("Conexão instável...", "alerta"); });
@@ -35,15 +37,13 @@ document.addEventListener('DOMContentLoaded', () => {
 function mostrarBotaoReconexao() { let painel = document.getElementById('painel-erro-conexao'); if (painel) painel.style.display = 'block'; loadIcons(); }
 function ocultarBotaoReconexao() { let painel = document.getElementById('painel-erro-conexao'); if (painel) painel.style.display = 'none'; }
 
-// SISTEMA DE TOASTS COM ANTI-SPAM E SWIPE
+// ==========================================
+// SISTEMA DE TOASTS E UI GLOBAL
+// ==========================================
 function mostrarToast(msg, tipo = "sucesso") { 
     const container = document.getElementById("toast-container"); 
-    
-    // Evita duplicatas (anti-spam de mensagens iguais)
     const toastsAtuais = container.querySelectorAll('.toast span');
-    for (let t of toastsAtuais) {
-        if (t.innerHTML === msg.replace(/\n/g, '<br>')) return; 
-    }
+    for (let t of toastsAtuais) { if (t.innerHTML === msg.replace(/\n/g, '<br>')) return; }
 
     const toast = document.createElement("div"); 
     toast.className = `toast ${tipo}`; 
@@ -52,42 +52,18 @@ function mostrarToast(msg, tipo = "sucesso") {
     if(tipo === 'alerta') icon = '<i data-lucide="info"></i>'; 
     
     toast.innerHTML = icon + ' <span style="flex: 1;">' + msg.replace(/\n/g, '<br>') + '</span><i data-lucide="x" class="toast-close"></i>'; 
-    container.appendChild(toast); 
-    loadIcons(); 
+    container.appendChild(toast); loadIcons(); 
     
-    if(tipo === 'sucesso') vibrar(100); 
-    if(tipo === 'erro') vibrar([50, 50, 50]); 
+    if(tipo === 'sucesso') vibrar(100); if(tipo === 'erro') vibrar([50, 50, 50]); 
     setTimeout(() => toast.classList.add("show"), 10); 
-    
     let timeoutId = setTimeout(() => { fecharToast(toast); }, 4000); 
 
     toast.onclick = () => { clearTimeout(timeoutId); fecharToast(toast); };
-
-    let startX = 0; let currentX = 0;
-    toast.addEventListener('touchstart', e => { 
-        startX = e.touches[0].clientX; toast.style.transition = 'none'; 
-    }, { passive: true });
-    
-    toast.addEventListener('touchmove', e => { 
-        currentX = e.touches[0].clientX; let diffX = currentX - startX; 
-        toast.style.transform = `translateX(${diffX}px)`; 
-        toast.style.opacity = 1 - (Math.abs(diffX) / 150); 
-    }, { passive: true });
-    
-    toast.addEventListener('touchend', e => { 
-        toast.style.transition = 'all 0.3s ease'; 
-        let diffX = currentX - startX; 
-        if (Math.abs(diffX) > 70 && currentX !== 0) { clearTimeout(timeoutId); fecharToast(toast, diffX > 0 ? 1 : -1); } 
-        else { toast.style.transform = 'translateY(0)'; toast.style.opacity = 1; } 
-    });
 }
 
-function fecharToast(toastElement, direcao = 0) {
+function fecharToast(toastElement) {
     if (!toastElement) return;
     toastElement.classList.remove("show");
-    if (direcao > 0) toastElement.style.transform = 'translateX(100%)';
-    else if (direcao < 0) toastElement.style.transform = 'translateX(-100%)';
-    else toastElement.style.transform = 'translateY(-20px)';
     setTimeout(() => toastElement.remove(), 300);
 }
 
@@ -110,12 +86,50 @@ function toggleTema() {
     if (document.getElementById('tela-dashboard').classList.contains('ativa')) abrirDashboard(); 
 }
 
+// ==========================================
+// FUNÇÃO DE AUTO-SAVE INVISÍVEL
+// ==========================================
+async function salvarConfiguracoesGlobais(mostrarAviso = false) {
+    if (!navigator.onLine) { if(mostrarAviso) mostrarToast("Sem conexão para salvar.", "erro"); return; }
+    try {
+        let payload = { 
+            id: 'padrao', 
+            mapa_emojis: mapaEmojis, 
+            aparelhos_premium: aparelhosPremium, 
+            taxas_coparticipacao: taxasCoparticipacao, 
+            valores_comissao: valoresComissao,
+            mostruarios: mostruariosGlobais
+        };
+        const { error } = await supabaseClient.from('configuracoes_globais').upsert([payload]);
+        if (error) throw error;
+        if (mostrarAviso) mostrarToast("Salvo na nuvem com sucesso!", "sucesso");
+    } catch (e) {
+        console.error("Erro no auto-save:", e);
+        if (mostrarAviso) mostrarToast("Erro ao auto-salvar.", "erro");
+    }
+}
+
+// ==========================================
+// NAVEGAÇÃO HÍBRIDA (MOBILE E PC) E TELAS
+// ==========================================
 function mudarTela(idTela) { 
     let telas = document.querySelectorAll('.tela'); 
     for(let i=0; i<telas.length; i++) { telas[i].classList.remove('ativa'); } 
     let telaAlvo = document.getElementById(idTela); 
     if(telaAlvo) telaAlvo.classList.add('ativa'); 
     
+    let sidebar = document.getElementById('sidebar-desktop');
+    let container = document.querySelector('.container');
+
+    if (idTela === 'tela-login') {
+        if (sidebar) sidebar.style.display = 'none';
+        if (container) container.classList.add('login-mode-desktop');
+    } else {
+        // A correção da barra lateral do celular está nesta linha:
+        if (sidebar) sidebar.style.display = window.innerWidth >= 1024 ? 'flex' : 'none'; 
+        if (container) container.classList.remove('login-mode-desktop');
+    }
+
     if (idTela === 'tela-menu' || idTela === 'tela-login') { 
         let hHome = document.getElementById('header-view-home'); if(hHome) hHome.style.display = 'flex'; 
         let hBack = document.getElementById('header-view-back'); if(hBack) hBack.style.display = 'none'; 
@@ -130,35 +144,46 @@ function mudarTela(idTela) {
         if(idTela === 'tela-historico') title = "Histórico"; 
         if(idTela === 'tela-dashboard') title = "Dashboard"; 
         if(idTela === 'tela-admin') title = "Ajustes"; 
-        if(idTela === 'tela-batalha') title = "Catálogo Tático"; 
         let hTitle = document.getElementById('header-title-sub'); if(hTitle) hTitle.innerText = title; 
     } 
     
-    const container = document.querySelector('.container'); 
     if (container) { 
         if(idTela === 'tela-dashboard' || idTela === 'tela-admin' || idTela === 'tela-historico') { 
             container.classList.add('container-wide'); 
-        } else { 
-            container.classList.remove('container-wide'); 
-        } 
+        } else { container.classList.remove('container-wide'); } 
     } 
     setTimeout(() => loadIcons(), 50); 
 }
 
-function navAction(acao, btnEl) { 
+function navAction(acao) { 
     document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('ativo')); 
-    if(btnEl) btnEl.classList.add('ativo'); 
+    document.querySelectorAll('.sidebar-link').forEach(item => item.classList.remove('ativo')); 
+    
+    let mobileBtn = document.querySelector(`.nav-item[data-acao="${acao}"]`);
+    let desktopBtn = document.querySelector(`.sidebar-link[data-acao="${acao}"]`);
+    if(mobileBtn) mobileBtn.classList.add('ativo');
+    if(desktopBtn) desktopBtn.classList.add('ativo');
+
     if(acao === 'venda') irParaVendas(); 
     else if(acao === 'acomp') abrirAcompanhamento(); 
     else if(acao === 'dashboard') abrirDashboard(); 
     else if(acao === 'estoque') abrirEstoque(); 
     else if(acao === 'admin') abrirAdmin(); 
-    else if(acao === 'batalha') abrirBatalha(); 
+    else if(acao === 'historico') abrirHistorico('geral');
 }
 
-function navTo(idTela, btnEl) { 
+function navTo(idTela) { 
     document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('ativo')); 
-    if(btnEl) btnEl.classList.add('ativo'); 
+    document.querySelectorAll('.sidebar-link').forEach(item => item.classList.remove('ativo')); 
+    
+    let acaoEquivalente = "home"; 
+    if (idTela === 'tela-menu') acaoEquivalente = "home";
+
+    let mobileBtn = document.querySelector(`.nav-item[data-acao="${acaoEquivalente}"]`);
+    let desktopBtn = document.querySelector(`.sidebar-link[data-acao="${acaoEquivalente}"]`);
+    if(mobileBtn) mobileBtn.classList.add('ativo');
+    if(desktopBtn) desktopBtn.classList.add('ativo');
+
     mudarTela(idTela); 
 }
 
@@ -170,56 +195,9 @@ function switchTab(tabId, groupClass) {
     loadIcons(); 
 }
 
-if(localStorage.getItem('temaEscuro') === 'sim') { document.body.classList.add('dark-mode'); }
-
-if ('serviceWorker' in navigator) { 
-    window.addEventListener('load', () => { navigator.serviceWorker.register('./sw.js').catch(err => { console.log('Erro no SW', err); }); }); 
-}
-
-async function salvarConfiguracoesGlobais(mostrarAviso = true) {
-    if (!navigator.onLine) { mostrarToast("Sem conexão.", "erro"); return; }
-    let btnSalvarHeader = document.querySelectorAll('.btn-save-memory');
-    btnSalvarHeader.forEach(btn => { btn.innerHTML = '<i data-lucide="loader-2" class="lucide-sm" style="animation: spin 1s linear infinite;"></i> Salvando...'; });
-
-    try {
-        let payload = { id: 'padrao', mapa_emojis: mapaEmojis, aparelhos_premium: aparelhosPremium, taxas_coparticipacao: taxasCoparticipacao, valores_comissao: valoresComissao };
-        const { error } = await supabaseClient.from('configuracoes_globais').upsert([payload]);
-        if (error) throw error;
-        if (mostrarAviso) mostrarToast("Alterações salvas no banco de dados!", "sucesso");
-    } catch (e) {
-        console.error(e);
-        if (mostrarAviso) mostrarToast("Erro ao salvar.", "erro");
-    } finally {
-        btnSalvarHeader.forEach(btn => { btn.innerHTML = '<i data-lucide="save" class="lucide-sm"></i> Salvar'; }); loadIcons();
-    }
-}
-
 // ==========================================
-// A NOVA FUNÇÃO DE GERENCIAMENTO (PIRÂMIDE GERENCIAL)
+// PULL TO REFRESH
 // ==========================================
-function podeGerenciar(logado, alvoId) {
-    if (!logado) return false; 
-    if (logado.id === alvoId) return true; 
-    if (logado.id === "master" || logado.cargo === "master") return true;
-    if (logado.cargo === "gestor") return true; 
-    
-    let alvo = bancoUsuarios[alvoId]; 
-    if(!alvo) return false;
-    
-    if (logado.cargo === "regional") {
-        // Se for regional, ele gerencia os supervisores que ele mesmo criou
-        if (alvo.criadoPor === logado.id) return true;
-        // E também gerencia os promotores criados por esses supervisores
-        let supCriador = bancoUsuarios[alvo.criadoPor];
-        if (supCriador && supCriador.criadoPor === logado.id) return true;
-        
-        // E para dar segurança, pode gerenciar quem estiver na mesma Região também
-        return alvo.regiao === logado.regiao;
-    }
-    if (logado.cargo === "supervisor") return alvo.criadoPor === logado.id; 
-    return false;
-}
-
 let ptrStartY = 0; let ptrCurrentY = 0; let isPulling = false;
 document.addEventListener('touchstart', e => { if (window.scrollY === 0 || document.documentElement.scrollTop === 0) { ptrStartY = e.touches[0].clientY; isPulling = true; } }, { passive: true });
 document.addEventListener('touchmove', e => {
@@ -262,6 +240,9 @@ function calcularDiasUteisRestantes() { let hoje = new Date(); let ultimoDia = n
 function extrairChaveAparelho(textoBruto) { let semImei = textoBruto.split("→")[0].split("(")[0].replace(/\[Motivo:.*?\]/g, "").trim().toLowerCase(); let chavesOrdenadas = Object.keys(mapaEmojis).sort((a, b) => b.length - a.length); for (let i = 0; i < chavesOrdenadas.length; i++) { let chave = chavesOrdenadas[i].toLowerCase(); if (semImei.includes(chave)) return chave; } return semImei.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, "").trim(); }
 function ehPremium(textoBruto, supervisorId) { let chave = extrairChaveAparelho(textoBruto); let pSup = aparelhosPremium[supervisorId]; if (!pSup || Object.keys(pSup).length === 0) pSup = aparelhosPremium["geral"] || {}; return (pSup[chave] === 1 || pSup[chave] === true); }
 
+// ==========================================
+// FUNÇÕES DE VENDAS (CARRINHO E BYPASS)
+// ==========================================
 function irParaVendas() {
     let adminRole = (usuarioLogado.cargo === "gestor" || usuarioLogado.cargo === "regional" || usuarioLogado.id === "master" || usuarioLogado.cargo === "supervisor");
     if (adminRole) { 
@@ -275,8 +256,8 @@ function irParaVendas() {
     }
 }
 
-function selecionarPromotor(obj) { let lojas = obj.lojasPermitidas || []; if(lojas.length === 0) { mostrarToast("Nenhuma loja vinculada a este promotor.", "alerta"); return; } if (lojas.length === 1) selecionarLoja(lojas[0]); else { montarBotoesLojas(lojas); mudarTela('tela-lojas'); } }
-function montarBotoesPromotores(listaChaves) { const div = document.getElementById('botoes-promotores-dinamicos'); div.innerHTML = ""; if (!listaChaves || listaChaves.length === 0) { div.innerHTML = "<div class='mensagem-vazia'>Você não tem promotores na sua equipe.</div>"; return; } listaChaves.sort((a, b) => { let nomeA = (bancoUsuarios[a].nome || a).toLowerCase(); let nomeB = (bancoUsuarios[b].nome || b).toLowerCase(); return nomeA.localeCompare(nomeB); }); listaChaves.forEach(k => { let btn = document.createElement('button'); btn.className = "btn-sistema"; btn.innerHTML = `<i data-lucide="user" class="lucide-sm"></i> Equipe ${bancoUsuarios[k].nome || k}`; btn.onclick = () => selecionarPromotor(bancoUsuarios[k]); div.appendChild(btn); }); loadIcons(); }
+function selecionarPromotor(obj) { let lojas = obj.lojasPermitidas || []; if(lojas.length === 0) { mostrarToast("Nenhuma loja vinculada.", "alerta"); return; } if (lojas.length === 1) selecionarLoja(lojas[0]); else { montarBotoesLojas(lojas); mudarTela('tela-lojas'); } }
+function montarBotoesPromotores(listaChaves) { const div = document.getElementById('botoes-promotores-dinamicos'); div.innerHTML = ""; if (!listaChaves || listaChaves.length === 0) { div.innerHTML = "<div class='mensagem-vazia'>Sem promotores na equipe.</div>"; return; } listaChaves.sort((a, b) => { let nomeA = (bancoUsuarios[a].nome || a).toLowerCase(); let nomeB = (bancoUsuarios[b].nome || b).toLowerCase(); return nomeA.localeCompare(nomeB); }); listaChaves.forEach(k => { let btn = document.createElement('button'); btn.className = "btn-sistema"; btn.innerHTML = `<i data-lucide="user" class="lucide-sm"></i> Equipe ${bancoUsuarios[k].nome || k}`; btn.onclick = () => selecionarPromotor(bancoUsuarios[k]); div.appendChild(btn); }); loadIcons(); }
 function montarBotoesLojas(arr) { const div = document.getElementById('botoes-lojas-dinamicos'); div.innerHTML = ""; let arrOrdenado = arr.sort((a, b) => a.localeCompare(b, undefined, {numeric: true, sensitivity: 'base'})); arrOrdenado.forEach(l => { let btn = document.createElement('button'); btn.className = "btn-sistema"; btn.innerHTML = `<i data-lucide="store" class="lucide-sm"></i> ${l}`; btn.onclick = () => selecionarLoja(l); div.appendChild(btn); }); loadIcons(); }
 
 function selecionarLoja(nomeLoja) {
@@ -290,13 +271,8 @@ function selecionarLoja(nomeLoja) {
 }
 
 function getPromotorDaLoja(loja) { for (let k in bancoUsuarios) { if (bancoUsuarios[k].cargo === "promotor" && bancoUsuarios[k].lojasPermitidas && bancoUsuarios[k].lojasPermitidas.includes(loja)) { return bancoUsuarios[k].nome || k; } } return "Promotor Indefinido"; }
-function renderizarVendedoresVenda() { const div = document.getElementById('grid-vendedores'); div.innerHTML = ""; const listaVendedores = (lojasConfig[lojaAtual] && lojasConfig[lojaAtual].vendedores) ? lojasConfig[lojaAtual].vendedores : []; if(listaVendedores.length === 0) { div.innerHTML = "<span style='color:var(--cor-secundaria); font-size:13px;'>Nenhum vendedor cadastrado nesta loja.</span>"; return; } let vendedoresOrdenados = [...listaVendedores].sort((a, b) => a.localeCompare(b, undefined, {numeric: true, sensitivity: 'base'})); vendedoresOrdenados.forEach(v => { let isAtivo = (vendedorSelecionadoVenda === v) ? "ativo" : ""; div.innerHTML += `<div class="card-vendedor-venda ${isAtivo}" onclick="toggleVendedorVenda('${v}')">${v}</div>`; }); loadIcons(); }
+function renderizarVendedoresVenda() { const div = document.getElementById('grid-vendedores'); div.innerHTML = ""; const listaVendedores = (lojasConfig[lojaAtual] && lojasConfig[lojaAtual].vendedores) ? lojasConfig[lojaAtual].vendedores : []; if(listaVendedores.length === 0) { div.innerHTML = "<span style='color:var(--cor-secundaria); font-size:13px;'>Nenhum vendedor nesta loja.</span>"; return; } let vendedoresOrdenados = [...listaVendedores].sort((a, b) => a.localeCompare(b, undefined, {numeric: true, sensitivity: 'base'})); vendedoresOrdenados.forEach(v => { let isAtivo = (vendedorSelecionadoVenda === v) ? "ativo" : ""; div.innerHTML += `<div class="card-vendedor-venda ${isAtivo}" onclick="toggleVendedorVenda('${v}')">${v}</div>`; }); loadIcons(); }
 function toggleVendedorVenda(nome) { if(vendedorSelecionadoVenda === nome) vendedorSelecionadoVenda = null; else vendedorSelecionadoVenda = nome; renderizarVendedoresVenda(); }
-// ==========================================
-// app.js - PARTE 4 a 7 DE 10
-// Carrinho, Acompanhamento, Histórico e Estoque
-// ==========================================
-
 function carregarCards() { const div = document.getElementById("grid-aparelhos"); let html = ""; for (let ap in mapaEmojis) { html += `<div class="item-aparelho"><div class="card-aparelho" onclick="iniciarSelecaoAparelho('${ap}')"><span class="emoji-card">${mapaEmojis[ap]}</span></div><span class="nome-card">${ap.toUpperCase()}</span></div>`; } div.innerHTML = html; }
 function iniciarSelecaoAparelho(ap) { if (!vendedorSelecionadoVenda) return mostrarToast("Selecione UM vendedor primeiro!", "alerta"); aparelhoEmSelecao = { nome: ap.toUpperCase(), emoji: mapaEmojis[ap] }; document.getElementById('modal-titulo-aparelho').innerHTML = `${aparelhoEmSelecao.emoji} ${aparelhoEmSelecao.nome}`; document.getElementById('input-imei').value = ""; document.getElementById('modal-imei').classList.add('ativo'); }
 function confirmarImei(comImei) { let imei = comImei ? document.getElementById('input-imei').value.trim() : ""; document.getElementById('modal-imei').classList.remove('ativo'); pendenciasVendaMultipla.push({ vendedor: vendedorSelecionadoVenda, aparelho: aparelhoEmSelecao.nome, emoji: aparelhoEmSelecao.emoji, imei: imei }); aparelhoEmSelecao = null; vendedorSelecionadoVenda = null; renderizarVendedoresVenda(); atualizarTelaConferencia(); }
@@ -321,9 +297,15 @@ async function enviarParaBanco() {
             if (qtdAtual < qtdExigida) aparelhosSemEstoque.push(`• ${apNome} (Estoque: ${qtdAtual} | Vendendo: ${qtdExigida})`);
         }
 
+        // LÓGICA DE BYPASS DO GESTOR
         if (aparelhosSemEstoque.length > 0) {
-            mostrarToast(`ESTOQUE INSUFICIENTE!\nCorrija a auditoria:\n\n${aparelhosSemEstoque.join('\n')}`, "erro");
-            btn.disabled = false; btn.innerHTML = '<i data-lucide="send"></i> Enviar'; loadIcons(); return; 
+            let isGestor = (usuarioLogado.cargo === "supervisor" || usuarioLogado.cargo === "regional" || usuarioLogado.cargo === "gestor" || usuarioLogado.id === "master");
+            if (isGestor) {
+                mostrarToast("Estoque insuficiente. Venda forçada liberada (Acesso Gestor).", "alerta");
+            } else {
+                mostrarToast(`ESTOQUE INSUFICIENTE!\nCorrija a auditoria:\n\n${aparelhosSemEstoque.join('\n')}`, "erro");
+                btn.disabled = false; btn.innerHTML = '<i data-lucide="send"></i> Enviar'; loadIcons(); return; 
+            }
         }
 
         btn.innerHTML = '<i data-lucide="loader-2" style="animation: spin 2s linear infinite;"></i> Salvando Venda...'; loadIcons();
@@ -339,7 +321,11 @@ async function enviarParaBanco() {
 
         for (let apNome in contagemNecessaria) {
              const { data: estItem } = await supabaseClient.from('estoque').select('*').eq('loja', lojaAtual).eq('aparelho', apNome).maybeSingle();
-             if (estItem) { let novaQtd = (estItem.quantidade || 0) - contagemNecessaria[apNome]; await supabaseClient.from('estoque').update({ quantidade: novaQtd }).eq('id', estItem.id); }
+             if (estItem) { 
+                 let novaQtd = (estItem.quantidade || 0) - contagemNecessaria[apNome]; 
+                 if (novaQtd < 0) novaQtd = 0; // IMPEDE O ESTOQUE DE FICAR NEGATIVO
+                 await supabaseClient.from('estoque').update({ quantidade: novaQtd }).eq('id', estItem.id); 
+             }
         }
 
         mostrarToast("Vendas registradas no banco!", "sucesso"); limparPendentes();
@@ -348,6 +334,9 @@ async function enviarParaBanco() {
     } finally { btn.disabled = false; btn.innerHTML = '<i data-lucide="send"></i> Enviar'; loadIcons(); }
 }
 
+// ==========================================
+// ACOMPANHAMENTO E HISTÓRICO
+// ==========================================
 function abrirAcompanhamento() { mudarTela('tela-acompanhamento'); if (usuarioLogado.cargo === "gestor" || usuarioLogado.cargo === "regional" || usuarioLogado.id === "master") { promotorFiltroAtual = "todos"; } else { promotorFiltroAtual = usuarioLogado.id; } subPromotorFiltroAtual = "todos"; renderizarFiltroPromotores(); carregarDadosDoBanco(); }
 function renderizarFiltroPromotores() { 
     const div = document.getElementById("seletor-promotores"); const divSub = document.getElementById("seletor-sub-promotores"); 
@@ -522,23 +511,47 @@ function setFiltroDataRapido(tipo) {
     else if (tipo === 'limpar') { inputInicio.value = ""; inputFim.value = ""; } aplicarFiltroHistorico();
 }
 
+// ==========================================
+// FUNÇÕES DE ESTOQUE E AUDITORIA
+// ==========================================
 function fecharModalConfirmMostruario() { document.getElementById('modal-confirm-mostruario').classList.remove('ativo'); mostruarioEmEdicao = null; }
 function fecharModalPromptMostruario() { document.getElementById('modal-prompt-mostruario').classList.remove('ativo'); mostruarioEmEdicao = null; }
-function executarRemoverMostruario() { if (!mostruarioEmEdicao) return; delete mostruariosGlobais[mostruarioEmEdicao.key]; localStorage.setItem('mostruariosGlobais', JSON.stringify(mostruariosGlobais)); renderizarListaEstoque(); mostrarToast("Status removido.", "info"); fecharModalConfirmMostruario(); }
-function executarAddMostruario() { if (!mostruarioEmEdicao) return; let obs = document.getElementById('input-obs-mostruario').value; mostruariosGlobais[mostruarioEmEdicao.key] = obs.trim() !== "" ? obs.trim() : true; localStorage.setItem('mostruariosGlobais', JSON.stringify(mostruariosGlobais)); renderizarListaEstoque(); mostrarToast("Marcado como mostruário!", "sucesso"); fecharModalPromptMostruario(); }
+
+function executarRemoverMostruario() { 
+    if (!mostruarioEmEdicao) return; 
+    delete mostruariosGlobais[mostruarioEmEdicao.key]; 
+    salvarConfiguracoesGlobais(false); 
+    renderizarListaEstoque(); 
+    mostrarToast("Status removido.", "info"); 
+    fecharModalConfirmMostruario(); 
+}
+
+function executarAddMostruario() { 
+    if (!mostruarioEmEdicao) return; 
+    let obs = document.getElementById('input-obs-mostruario').value; 
+    mostruariosGlobais[mostruarioEmEdicao.key] = obs.trim() !== "" ? obs.trim() : true; 
+    salvarConfiguracoesGlobais(false); 
+    renderizarListaEstoque(); 
+    mostrarToast("Marcado como mostruário!", "sucesso"); 
+    fecharModalPromptMostruario(); 
+}
+
 function toggleMostruario(loja, ap) { let k = `${loja}_${ap}`; mostruarioEmEdicao = { loja: loja, ap: ap, key: k }; if (mostruariosGlobais[k]) { document.getElementById('texto-confirm-mostruario').innerHTML = `Deseja DESMARCAR o <b>${ap}</b> como mostruário na loja <b>${loja}</b>?`; document.getElementById('modal-confirm-mostruario').classList.add('ativo'); } else { document.getElementById('texto-prompt-mostruario').innerHTML = `Marcando <b>${ap}</b> como MOSTRUÁRIO na loja <b>${loja}</b>.`; document.getElementById('input-obs-mostruario').value = ""; document.getElementById('modal-prompt-mostruario').classList.add('ativo'); } }
 
 function abrirEstoque() { mudarTela('tela-estoque'); promotorEstoqueFiltroAtual = (usuarioLogado.cargo === "gestor" || usuarioLogado.cargo === "regional" || usuarioLogado.id === "master") ? "todos" : usuarioLogado.id; renderizarFiltroPromotoresEstoque(); carregarEstoqueDoBanco(); }
+
 async function carregarEstoqueDoBanco() {
     let btn = document.getElementById("btn-atualizar-estoque"); if(btn) btn.innerHTML = '<i data-lucide="loader-2" style="animation: spin 2s linear infinite;"></i> Atualizando...'; loadIcons(); document.getElementById("lista-estoque-agrupada").innerHTML = gerarSkeletonHtml(4);
     try { const { data, error } = await supabaseClient.from('estoque').select('*'); if (error) throw error; dadosEstoqueGlobal = data.map(row => ({ Loja: row.loja, Aparelho: row.aparelho, Quantidade: row.quantidade })); renderizarListaEstoque(); } catch (err) { console.error(err); document.getElementById("lista-estoque-agrupada").innerHTML = `<p style="color:red;">Erro ao carregar estoque.</p>`; mostrarBotaoReconexao(); } finally { if(btn) btn.innerHTML = '<i data-lucide="refresh-cw"></i> Atualizar Estoque'; loadIcons(); }
 }
+
 function renderizarFiltroPromotoresEstoque() { 
     const div = document.getElementById("seletor-promotores-estoque"); if (usuarioLogado.cargo === "promotor") { div.innerHTML = `<div class="card-promotor-filtro ativo"><i data-lucide="user" class="lucide-sm"></i> ${usuarioLogado.nome}</div>`; loadIcons(); return; } 
     let html = `<div class="card-promotor-filtro ${promotorEstoqueFiltroAtual === 'todos' ? 'ativo' : ''}" onclick="setFiltroPromotorEstoque('todos')"><i data-lucide="layout-dashboard" class="lucide-sm"></i> Visão Geral (Todas)</div>`; 
     if (usuarioLogado.cargo === "gestor" || usuarioLogado.cargo === "regional" || usuarioLogado.id === "master") { for (let key in bancoUsuarios) { if (bancoUsuarios[key].cargo === "supervisor") { if (podeGerenciar(usuarioLogado, key)) { html += `<div class="card-promotor-filtro ${promotorEstoqueFiltroAtual === key ? 'ativo' : ''}" onclick="setFiltroPromotorEstoque('${key}')"><i data-lucide="users" class="lucide-sm"></i> Equipe ${bancoUsuarios[key].nome || key}</div>`; } } } } else if (usuarioLogado.cargo === "supervisor") { for (let key in bancoUsuarios) { if (bancoUsuarios[key].cargo === "promotor" && bancoUsuarios[key].criadoPor === usuarioLogado.id) { html += `<div class="card-promotor-filtro ${promotorEstoqueFiltroAtual === key ? 'ativo' : ''}" onclick="setFiltroPromotorEstoque('${key}')"><i data-lucide="user" class="lucide-sm"></i> ${bancoUsuarios[key].nome || key}</div>`; } } } 
     div.innerHTML = html; loadIcons(); 
 }
+
 function setFiltroPromotorEstoque(id) { promotorEstoqueFiltroAtual = id; renderizarFiltroPromotoresEstoque(); renderizarListaEstoque(); }
 
 function renderizarListaEstoque() { 
@@ -559,22 +572,86 @@ function renderizarListaEstoque() {
             if (qtd === 0 && !mostrarZerados) continue; 
             totalLoja += qtd; 
             let btnId = (loja + apNome).replace(/[^a-zA-Z0-9]/g, ''); let kMostruario = `${loja}_${apNome}`; let isMostruario = mostruariosGlobais[kMostruario]; 
-            if (qtd !== 1 && isMostruario) { delete mostruariosGlobais[kMostruario]; isMostruario = false; localStorage.setItem('mostruariosGlobais', JSON.stringify(mostruariosGlobais)); } 
+            if (qtd !== 1 && isMostruario) { delete mostruariosGlobais[kMostruario]; isMostruario = false; salvarConfiguracoesGlobais(false); } 
             let btnMostruarioHtml = ""; if (qtd === 1) { if (isMostruario) { btnMostruarioHtml = `<span onclick="toggleMostruario('${loja}', '${apNome}')" style="cursor:pointer; font-size:10px; background:#ef4444; color:white; padding:4px 8px; border-radius:12px; margin-left:8px; font-weight:bold;">🔴 Mostruário</span>`; } else { btnMostruarioHtml = `<span onclick="toggleMostruario('${loja}', '${apNome}')" style="cursor:pointer; font-size:10px; background:var(--bg-fundo); border:1px solid var(--border-color); color:var(--cor-secundaria); padding:4px 8px; border-radius:12px; margin-left:8px;">⚪ Marcar Mostruário</span>`; } } 
             let htmlControles = ""; let permEstoquePromotor = (usuarioLogado.cargo === "promotor") ? (usuarioLogado.permissoes ? usuarioLogado.permissoes.estoque_editar : true) : false; let adminRole = (usuarioLogado.cargo === "supervisor" || usuarioLogado.cargo === "regional" || usuarioLogado.cargo === "gestor" || usuarioLogado.id === "master"); let badgeStyle = ""; let iconeAlerta = ""; 
             if (qtd > 0 && qtd < 3) { badgeStyle = "background-color: #fee2e2; color: #ef4444; border-color: #ef4444;"; iconeAlerta = " 🔥"; } 
-            if (permEstoquePromotor || adminRole) { htmlControles = `<button class="btn-est" onclick="alterarEstoque('${loja}', '${apNome}', -1, '${btnId}')">-</button><span class="qtd-badge" id="badge-${btnId}" style="${badgeStyle}">${qtd}${iconeAlerta}</span><button class="btn-est" onclick="alterarEstoque('${loja}', '${apNome}', 1, '${btnId}')">+</button>`; } else { htmlControles = `<span class="qtd-badge" style="${badgeStyle}">${qtd} un${iconeAlerta}</span>`; } 
+            
+            // EDIÇÃO DIRETA DO ESTOQUE
+            if (permEstoquePromotor || adminRole) { 
+                htmlControles = `<button class="btn-est" onclick="alterarEstoque('${loja}', '${apNome}', -1, '${btnId}')">-</button>
+                                 <input type="number" class="qtd-badge-input" id="badge-${btnId}" value="${qtd}" onchange="setEstoqueDireto('${loja}', '${apNome}', this, '${btnId}')" style="${badgeStyle}">
+                                 <button class="btn-est" onclick="alterarEstoque('${loja}', '${apNome}', 1, '${btnId}')">+</button>`; 
+            } else { 
+                htmlControles = `<span class="qtd-badge" style="${badgeStyle}">${qtd} un${iconeAlerta}</span>`; 
+            } 
+            
             htmlItens += `<div class="card-estoque-pop"><div class="header-pop"><span style="font-weight: bold; font-size: 15px;">${apNome} ${btnMostruarioHtml}</span></div><div style="display: flex; justify-content: space-between; align-items: center;"><span style="font-size: 13px; color: var(--cor-secundaria);">Quantidade:</span><div class="estoque-controles">${htmlControles}</div></div></div>`; 
         } 
         if(htmlItens !== "") { html += `<div class="loja-card-acompanhamento" style="background: transparent; border: none; box-shadow: none; padding: 0;"><div class="loja-titulo" style="margin-bottom: 15px; border-radius: 12px;"><span><i data-lucide="store" class="lucide-sm"></i> ${loja}</span><span class="loja-badge-total">Total: ${totalLoja} un</span></div><div>${htmlItens}</div></div>`; } 
     } 
-    let bannerAlertaHtml = ""; if (totalRupturas > 0 || totalBaixoEstoque > 0) { bannerAlertaHtml = `<div style="background:rgba(239, 68, 68, 0.08); border:1px solid rgba(239, 68, 68, 0.3); border-radius:12px; padding:14px 16px; margin-bottom:15px; text-align:left; display:flex; align-items:center; gap:12px;"><i data-lucide="alert-triangle" style="color:#ef4444; width:24px; height:24px; flex-shrink:0;"></i><div style="font-size:13px; color:var(--cor-texto); line-height:1.4;"><strong>Alerta Operacional:</strong> Há <span style="color:#ef4444; font-weight:bold;">${totalRupturas} itens em ruptura (0 un)</span> e <span style="color:#f59e0b; font-weight:bold;">${totalBaixoEstoque} itens em nível crítico (< 3 un)</span> nas lojas filtradas.</div></div>`; }
+    let bannerAlertaHtml = ""; if (totalRupturas > 0 || totalBaixoEstoque > 0) { bannerAlertaHtml = `<div style="background:rgba(239, 68, 68, 0.08); border:1px solid rgba(239, 68, 68, 0.3); border-radius:12px; padding:14px 16px; margin-bottom:15px; text-align:left; display:flex; align-items:center; gap:12px;"><i data-lucide="alert-triangle" style="color:#ef4444; width:24px; height:24px; flex-shrink:0;"></i><div style="font-size:13px; color:var(--cor-texto); line-height:1.4;"><strong>Alerta Operacional:</strong> Há <span style="color:#ef4444; font-weight:bold;">${totalRupturas} items em ruptura (0 un)</span> e <span style="color:#f59e0b; font-weight:bold;">${totalBaixoEstoque} itens em nível crítico (< 3 un)</span> nas lojas filtradas.</div></div>`; }
     document.getElementById("lista-estoque-agrupada").innerHTML = bannerAlertaHtml + (html || `<div class='mensagem-vazia'>Nenhum estoque para exibir.</div>`); atualizarTelaConferenciaEstoque(); loadIcons(); 
 }
 
-function alterarEstoque(loja, ap, delta, id) { let k = `${loja}|${ap}`; if (!pendenciasEstoque[k]) { let linha = dadosEstoqueGlobal.find(r => r.Loja === loja && r.Aparelho === ap); pendenciasEstoque[k] = { loja: loja, aparelho: ap, qtdOriginal: linha ? Number(linha.Quantidade) : 0, novaQtd: 0, deltaTotal: 0 }; } let p = pendenciasEstoque[k]; p.deltaTotal += delta; p.novaQtd = p.qtdOriginal + p.deltaTotal; if (p.novaQtd < 0) { p.novaQtd = 0; p.deltaTotal = -p.qtdOriginal; } let badge = document.getElementById(`badge-${id}`); if(badge) { badge.innerText = p.novaQtd; badge.style.backgroundColor = p.deltaTotal !== 0 ? "#fef3c7" : "transparent"; badge.style.color = p.deltaTotal !== 0 ? "#b45309" : "var(--cor-texto)"; } atualizarTelaConferenciaEstoque(); }
-function atualizarTelaConferenciaEstoque() { const div = document.getElementById("area-conferencia-estoque"); const lista = document.getElementById("lista-pendentes-estoque"); const btnOk = document.getElementById('container-btn-conferencia-ok'); let html = ""; let tem = false; for (let k in pendenciasEstoque) { let p = pendenciasEstoque[k]; if (p.deltaTotal !== 0) { tem = true; html += `<div style="background: var(--bg-container); border: 1px solid var(--border-color); padding: 12px; border-radius: 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; font-size: 13px;"><span>📍 [${p.loja}] ${p.aparelho}</span><span>De: <strong>${p.qtdOriginal}</strong> ➔ Para: <span style="color: var(--primary); font-weight: bold;">${p.novaQtd} un</span></span></div>`; } } if (tem) { div.style.display = "block"; lista.innerHTML = html; if(btnOk) btnOk.style.display = "none"; } else { div.style.display = "none"; lista.innerHTML = ""; let hoje = new Date().toLocaleDateString('pt-BR'); let ultima = localStorage.getItem('ultimaConferencia_' + usuarioLogado.id); if (usuarioLogado.cargo === "promotor" && ultima !== hoje) { if(btnOk) btnOk.style.display = "block"; } else { if(btnOk) btnOk.style.display = "none"; } } }
+function alterarEstoque(loja, ap, delta, id) { 
+    let k = `${loja}|${ap}`; 
+    if (!pendenciasEstoque[k]) { let linha = dadosEstoqueGlobal.find(r => r.Loja === loja && r.Aparelho === ap); pendenciasEstoque[k] = { loja: loja, aparelho: ap, qtdOriginal: linha ? Number(linha.Quantidade) : 0, novaQtd: 0, deltaTotal: 0 }; } 
+    let p = pendenciasEstoque[k]; p.deltaTotal += delta; p.novaQtd = p.qtdOriginal + p.deltaTotal; 
+    if (p.novaQtd < 0) { p.novaQtd = 0; p.deltaTotal = -p.qtdOriginal; } 
+    let badge = document.getElementById(`badge-${id}`); 
+    if(badge) { 
+        if (badge.tagName === 'INPUT') badge.value = p.novaQtd; else badge.innerText = p.novaQtd;
+        badge.style.backgroundColor = p.deltaTotal !== 0 ? "#fef3c7" : "transparent"; badge.style.color = p.deltaTotal !== 0 ? "#b45309" : "var(--cor-texto)"; 
+    } 
+    atualizarTelaConferenciaEstoque(); 
+}
+
+function setEstoqueDireto(loja, ap, inputEl, id) {
+    let novoValor = parseInt(inputEl.value);
+    if (isNaN(novoValor) || novoValor < 0) { novoValor = 0; inputEl.value = 0; }
+    let k = `${loja}|${ap}`;
+    if (!pendenciasEstoque[k]) {
+        let linha = dadosEstoqueGlobal.find(r => r.Loja === loja && r.Aparelho === ap);
+        pendenciasEstoque[k] = { loja: loja, aparelho: ap, qtdOriginal: linha ? Number(linha.Quantidade) : 0, novaQtd: 0, deltaTotal: 0 };
+    }
+    let p = pendenciasEstoque[k];
+    p.novaQtd = novoValor;
+    p.deltaTotal = p.novaQtd - p.qtdOriginal;
+    
+    inputEl.style.backgroundColor = p.deltaTotal !== 0 ? "#fef3c7" : "transparent";
+    inputEl.style.color = p.deltaTotal !== 0 ? "#b45309" : "var(--cor-texto)";
+    atualizarTelaConferenciaEstoque();
+}
+
+function atualizarTelaConferenciaEstoque() { 
+    const div = document.getElementById("area-conferencia-estoque"); 
+    const lista = document.getElementById("lista-pendentes-estoque"); 
+    const btnOk = document.getElementById('container-btn-conferencia-ok'); 
+    let html = ""; let tem = false; 
+    for (let k in pendenciasEstoque) { 
+        let p = pendenciasEstoque[k]; 
+        if (p.deltaTotal !== 0) { 
+            tem = true; 
+            html += `<div style="background: var(--bg-container); border: 1px solid var(--border-color); padding: 12px; border-radius: 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; font-size: 13px;"><span>📍 [${p.loja}] ${p.aparelho}</span><span>De: <strong>${p.qtdOriginal}</strong> ➔ Para: <span style="color: var(--primary); font-weight: bold;">${p.novaQtd} un</span></span></div>`; 
+        } 
+    } 
+    if (tem) { 
+        div.style.display = "block"; lista.innerHTML = html; if(btnOk) btnOk.style.display = "none"; 
+    } else { 
+        div.style.display = "none"; lista.innerHTML = ""; 
+        let hoje = new Date().toLocaleDateString('pt-BR'); 
+        let ultima = usuarioLogado.ultima_conferencia; 
+        if (usuarioLogado.cargo === "promotor" && ultima !== hoje) { 
+            if(btnOk) btnOk.style.display = "block"; 
+        } else { 
+            if(btnOk) btnOk.style.display = "none"; 
+        } 
+    } 
+}
+
 function limparConferenciaEstoque() { renderizarListaEstoque(); }
+
 function verificarMotivoEstoque() { let chaves = Object.keys(pendenciasEstoque).filter(k => pendenciasEstoque[k].deltaTotal !== 0); if (chaves.length === 0) return; let adminRole = (usuarioLogado.cargo === "supervisor" || usuarioLogado.cargo === "regional" || usuarioLogado.cargo === "gestor" || usuarioLogado.id === "master"); if (adminRole) { executarEnvioEstoque("Ajuste Gerencial"); } else { document.getElementById('modal-motivo-estoque').classList.add('ativo'); } }
 function confirmarEnvioEstoqueMotivo() { document.getElementById('modal-motivo-estoque').classList.remove('ativo'); executarEnvioEstoque(document.getElementById('select-motivo-estoque').value); }
 
@@ -582,6 +659,7 @@ async function executarEnvioEstoque(motivoSelecionado) {
     if (!navigator.onLine) { mostrarToast("Sem internet!", "erro"); mostrarBotaoReconexao(); return; }
     const btn = document.getElementById("btn-enviar-estoque"); btn.disabled = true; btn.innerHTML = '<i data-lucide="loader-2" style="animation: spin 2s linear infinite;"></i> Atualizando...'; loadIcons();
     let chaves = Object.keys(pendenciasEstoque).filter(k => pendenciasEstoque[k].deltaTotal !== 0); let qtdAlterada = chaves.length;
+    let dataHojeStr = new Date().toLocaleDateString('pt-BR');
     try {
         for (let i = 0; i < chaves.length; i++) {
             let p = pendenciasEstoque[chaves[i]];
@@ -589,25 +667,49 @@ async function executarEnvioEstoque(motivoSelecionado) {
             if (estItem) { await supabaseClient.from('estoque').update({ quantidade: p.novaQtd }).eq('id', estItem.id); } else { await supabaseClient.from('estoque').insert({ loja: p.loja, aparelho: p.aparelho, quantidade: p.novaQtd }); }
             await supabaseClient.from('vendas').insert([{ promotor_login: usuarioLogado.id, loja: p.loja, vendedor: motivoSelecionado || "Ajuste Manual", aparelhos_vendidos: `[Auditoria] ${p.aparelho}: De ${p.qtdOriginal} para ${p.novaQtd} un`, data_venda: new Date().toISOString(), status: 'Auditoria' }]);
         }
-        localStorage.setItem('ultimaConferencia_' + usuarioLogado.id, new Date().toLocaleDateString('pt-BR')); mostrarToast(`Correção Enviada!<br>${qtdAlterada} modelos alterados.`, "sucesso"); carregarEstoqueDoBanco();
+        await supabaseClient.from('usuarios').update({ ultima_conferencia: dataHojeStr }).eq('login', usuarioLogado.id);
+        usuarioLogado.ultima_conferencia = dataHojeStr;
+        mostrarToast(`Correção Enviada!<br>${qtdAlterada} modelos alterados.`, "sucesso"); carregarEstoqueDoBanco();
     } catch (e) { console.error(e); mostrarToast("Erro ao atualizar estoque.", "erro"); mostrarBotaoReconexao(); } finally { btn.disabled = false; btn.innerHTML = '<i data-lucide="upload-cloud"></i> Enviar Atualização'; loadIcons(); }
 }
+
 async function enviarConferenciaDiaria() { 
     if (!navigator.onLine) { mostrarToast("Sem internet para confirmar.", "erro"); return; }
     let btn = document.getElementById('btn-conferencia-ok'); if(btn) { btn.disabled = true; btn.innerHTML = '<i data-lucide="loader-2" style="animation: spin 1s linear infinite;"></i> Registrando...'; loadIcons(); }
+    let dataHojeStr = new Date().toLocaleDateString('pt-BR');
     try {
         const { error } = await supabaseClient.from('vendas').insert([{ promotor_login: usuarioLogado.id, loja: document.getElementById('filtro-loja-estoque') ? document.getElementById('filtro-loja-estoque').value : "Múltiplas", vendedor: "Conferência Diária", aparelhos_vendidos: "[Auditoria] Estoque conferido e validado sem alterações.", data_venda: new Date().toISOString(), status: 'Auditoria' }]);
         if (error) throw error;
-        localStorage.setItem('ultimaConferencia_' + usuarioLogado.id, new Date().toLocaleDateString('pt-BR')); document.getElementById('container-btn-conferencia-ok').style.display = "none"; mostrarToast("Conferência registrada na nuvem com sucesso!", "sucesso"); 
+        await supabaseClient.from('usuarios').update({ ultima_conferencia: dataHojeStr }).eq('login', usuarioLogado.id);
+        usuarioLogado.ultima_conferencia = dataHojeStr;
+        document.getElementById('container-btn-conferencia-ok').style.display = "none"; mostrarToast("Conferência registrada na nuvem com sucesso!", "sucesso"); 
     } catch (e) { console.error("Erro ao registrar conferência:", e); mostrarToast("Erro ao registrar conferência no sistema.", "erro"); } finally { if(btn) { btn.disabled = false; btn.innerHTML = '<i data-lucide="check-square" class="lucide-lg"></i> Confirmar Conferência Diária'; loadIcons(); } }
 }
-// ==========================================
-// app.js - PARTE 8 e 9 DE 10
-// Dashboard, Filtros em Pirâmide, Market Share e Exportação
-// ==========================================
 
-let chartHorariosPico = null;
-let chartPaceVisual = null;
+// ==========================================
+// DASHBOARD, GRÁFICOS E LÓGICA DE DADOS
+// ==========================================
+window.setFiltroDataRapidoDash = function(tipo) {
+    let inputInicio = document.getElementById('dash-data-inicio'); 
+    let inputFim = document.getElementById('dash-data-fim'); 
+    if (!inputInicio || !inputFim) return;
+    
+    let hoje = new Date(); 
+    let formatarData = (d) => { 
+        let ano = d.getFullYear(); 
+        let mes = String(d.getMonth() + 1).padStart(2, '0'); 
+        let dia = String(d.getDate()).padStart(2, '0'); 
+        return `${ano}-${mes}-${dia}`; 
+    };
+    
+    if (tipo === 'hoje') { let strHoje = formatarData(hoje); inputInicio.value = strHoje; inputFim.value = strHoje; } 
+    else if (tipo === 'ontem') { let ontem = new Date(); ontem.setDate(hoje.getDate() - 1); let strOntem = formatarData(ontem); inputInicio.value = strOntem; inputFim.value = strOntem; } 
+    else if (tipo === 'semana') { let inicioSemana = new Date(); inicioSemana.setDate(hoje.getDate() - 7); inputInicio.value = formatarData(inicioSemana); inputFim.value = formatarData(hoje); } 
+    else if (tipo === 'mes') { let inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1); inputInicio.value = formatarData(inicioMes); inputFim.value = formatarData(hoje); } 
+    else if (tipo === 'limpar') { inputInicio.value = ""; inputFim.value = ""; } 
+    
+    forcarAtualizacaoDashboard();
+};
 
 function forcarAtualizacaoDashboard() { 
     mostrarToast("Buscando dados atualizados...", "info"); 
@@ -617,16 +719,9 @@ function forcarAtualizacaoDashboard() {
     if(typeof carregarGraficosShare === 'function') carregarGraficosShare(); 
 }
 
-// ==========================================
-// ABRIR DASHBOARD (COM TRAVA GERENCIAL PARA PROMOTOR)
-// ==========================================
 function abrirDashboard() { 
-    mudarTela('tela-dashboard'); 
-    window.confettiDisparado = false; 
+    mudarTela('tela-dashboard'); window.confettiDisparado = false; 
 
-    // ==========================================
-    // TRAVA GERENCIAL: ESCONDE ABAS DOS PROMOTORES
-    // ==========================================
     let btnDesempenho = document.getElementById('btn-tab-desempenho');
     let btnAvancada = document.getElementById('btn-tab-avancada');
     let btnOppo = document.getElementById('btn-tab-oppo');
@@ -634,79 +729,51 @@ function abrirDashboard() {
     if (usuarioLogado.cargo === "promotor") {
         if (btnDesempenho) btnDesempenho.style.display = "none";
         if (btnAvancada) btnAvancada.style.display = "none";
-        
-        // Garante que o promotor caia sempre na primeira aba (Resultados) e nunca numa aba invisível
         switchTab('dash-tab-oppo', 'dash-tab');
-        if (btnOppo) {
-            document.querySelectorAll('.dash-tab-btn').forEach(b => b.classList.remove('ativo'));
-            btnOppo.classList.add('ativo');
-        }
+        if (btnOppo) { document.querySelectorAll('.dash-tab-btn').forEach(b => b.classList.remove('ativo')); btnOppo.classList.add('ativo'); }
     } else {
-        // Se for Supervisor, Regional ou Gestor, mostra tudo
         if (btnDesempenho) btnDesempenho.style.display = "";
         if (btnAvancada) btnAvancada.style.display = "";
     }
-    // ==========================================
 
     let cReg = document.getElementById('container-filtro-regional-dash');
     let cSup = document.getElementById('container-filtro-supervisor-dash');
     let cProm = document.getElementById('container-filtro-promotor-dash');
 
-    // MÁGICA DA PIRÂMIDE E PERMISSÃO DE VISUALIZAÇÃO
     if (usuarioLogado.cargo === "gestor" || usuarioLogado.id === "master") {
-        if(cReg) cReg.style.display = "flex"; 
-        if(cSup) cSup.style.display = "flex"; 
-        if(cProm) cProm.style.display = "flex";
-
+        if(cReg) cReg.style.display = "flex"; if(cSup) cSup.style.display = "flex"; if(cProm) cProm.style.display = "flex";
         let selReg = document.getElementById('filtro-regional-dash');
         if (selReg && selReg.options.length <= 1) {
             let htmlOp = '<option value="todos">Todas as Regiões (Geral)</option>';
-            for(let k in bancoUsuarios) {
-                if (bancoUsuarios[k].cargo === "regional" || bancoUsuarios[k].cargo === "gestor") {
-                    htmlOp += `<option value="${k}">Gestor/Região: ${bancoUsuarios[k].nome || k}</option>`;
-                }
-            }
+            for(let k in bancoUsuarios) { if (bancoUsuarios[k].cargo === "regional" || bancoUsuarios[k].cargo === "gestor") { htmlOp += `<option value="${k}">Gestor/Região: ${bancoUsuarios[k].nome || k}</option>`; } }
             selReg.innerHTML = htmlOp;
         }
         if(document.getElementById('filtro-supervisor-dash') && document.getElementById('filtro-supervisor-dash').options.length <= 1) mudouRegionalDash();
-
     } else if (usuarioLogado.cargo === "regional") {
-        if(cReg) cReg.style.display = "none"; 
-        if(cSup) cSup.style.display = "flex"; 
-        if(cProm) cProm.style.display = "flex";
+        if(cReg) cReg.style.display = "none"; if(cSup) cSup.style.display = "flex"; if(cProm) cProm.style.display = "flex";
         if(document.getElementById('filtro-supervisor-dash') && document.getElementById('filtro-supervisor-dash').options.length <= 1) mudouRegionalDash();
     } else if (usuarioLogado.cargo === "supervisor") {
-        if(cReg) cReg.style.display = "none"; 
-        if(cSup) cSup.style.display = "none"; 
-        if(cProm) cProm.style.display = "flex";
+        if(cReg) cReg.style.display = "none"; if(cSup) cSup.style.display = "none"; if(cProm) cProm.style.display = "flex";
         if(document.getElementById('filtro-promotor-dash') && document.getElementById('filtro-promotor-dash').options.length <= 1) atualizarFiltroPromotorDash();
     } else {
-        if(cReg) cReg.style.display = "none"; 
-        if(cSup) cSup.style.display = "none"; 
-        if(cProm) cProm.style.display = "none";
+        if(cReg) cReg.style.display = "none"; if(cSup) cSup.style.display = "none"; if(cProm) cProm.style.display = "none";
         atualizarFiltroLojaDash();
     }
 
     document.getElementById("total-comissao-geral").innerText = "R$ ****"; 
     document.getElementById("icone-olho-comissao").innerHTML = '<i data-lucide="eye" style="margin:0;"></i>'; 
-    loadIcons(); 
-    document.getElementById("total-vendas-geral").innerText = "..."; 
+    loadIcons(); document.getElementById("total-vendas-geral").innerText = "..."; 
     
-    let inputDtIni = document.getElementById("dash-data-inicio");
-    let inputDtFim = document.getElementById("dash-data-fim");
-    let dtInicio = inputDtIni && inputDtIni.value ? inputDtIni.value : null;
-    let dtFim = inputDtFim && inputDtFim.value ? inputDtFim.value : null;
+    let inputDtIni = document.getElementById("dash-data-inicio"); let inputDtFim = document.getElementById("dash-data-fim");
+    let dtInicio = inputDtIni && inputDtIni.value ? inputDtIni.value : null; let dtFim = inputDtFim && inputDtFim.value ? inputDtFim.value : null;
     
     let query = supabaseClient.from('vendas').select('*').neq('status', 'Cancelado').neq('status', 'Auditoria');
-
     if (dtInicio) query = query.gte('data_venda', dtInicio + 'T00:00:00');
     if (dtFim) query = query.lte('data_venda', dtFim + 'T23:59:59');
 
     query.then(({ data, error }) => {
         if (error) throw error;
-        let dados = (data || [])
-            .filter(row => !(row.aparelhos_vendidos || "").toUpperCase().includes('[AUDITORIA]'))
-            .map(row => ({ promotor_login: row.promotor_login, loja: row.loja, Vendedor: `[${row.loja}] ${row.vendedor}`, Aparelhos: row.aparelhos_vendidos, Data: row.data_venda }));
+        let dados = (data || []).filter(row => !(row.aparelhos_vendidos || "").toUpperCase().includes('[AUDITORIA]')).map(row => ({ promotor_login: row.promotor_login, loja: row.loja, Vendedor: `[${row.loja}] ${row.vendedor}`, Aparelhos: row.aparelhos_vendidos, Data: row.data_venda }));
         dadosAcompanhamentoGlobal = dados; 
         gerarGraficos(dados);
     }).catch(e => { 
@@ -715,109 +782,48 @@ function abrirDashboard() {
     }).finally(() => { let icone = document.getElementById('icon-refresh-dash'); if(icone) icone.style.animation = "none"; loadIcons(); }); 
 }
 
-// ==========================================
-// MODAL EXTRATO DE COMISSÃO
-// ==========================================
 function abrirExtratoComissao() { 
-    let elComissao = document.getElementById("total-comissao-geral"); 
-    let iconeOlho = document.getElementById("icone-olho-comissao"); 
-    
-    if (elComissao.innerText === "R$ ****") { 
-        elComissao.innerText = elComissao.dataset.valor || "R$ 0,00"; 
-        iconeOlho.innerHTML = '<i data-lucide="eye-off" style="margin:0;"></i>'; 
-        loadIcons(); 
-    } 
-
-    let html = '';
-    let totalExtrato = 0;
-    let map = window.extratoComissaoAtual || {};
-
+    let elComissao = document.getElementById("total-comissao-geral"); let iconeOlho = document.getElementById("icone-olho-comissao"); 
+    if (elComissao.innerText === "R$ ****") { elComissao.innerText = elComissao.dataset.valor || "R$ 0,00"; iconeOlho.innerHTML = '<i data-lucide="eye-off" style="margin:0;"></i>'; loadIcons(); } 
+    let html = ''; let totalExtrato = 0; let map = window.extratoComissaoAtual || {};
     for(let key in map) {
-        let item = map[key];
-        let titulo = key;
+        let item = map[key]; let titulo = key;
         let sub = item.isCampanha ? `${item.qtd}x Atingimentos Bônus` : `${item.qtd} un x R$ ${item.valorUnit.toFixed(2)}`;
         let totForm = `R$ ${item.total.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
         totalExtrato += item.total;
-
-        html += `<div style="display:flex; justify-content:space-between; align-items:center; padding: 12px 0; border-bottom: 1px dashed var(--border-color);">
-                    <div style="text-align: left;">
-                        <strong style="font-size: 13px; color: var(--cor-texto); display:block; margin-bottom: 2px;">${titulo}</strong>
-                        <span style="font-size: 11px; color: var(--cor-secundaria);">${sub}</span>
-                    </div>
-                    <strong style="font-size: 14px; color: #10b981;">${totForm}</strong>
-                 </div>`;
+        html += `<div style="display:flex; justify-content:space-between; align-items:center; padding: 12px 0; border-bottom: 1px dashed var(--border-color);"><div style="text-align: left;"><strong style="font-size: 13px; color: var(--cor-texto); display:block; margin-bottom: 2px;">${titulo}</strong><span style="font-size: 11px; color: var(--cor-secundaria);">${sub}</span></div><strong style="font-size: 14px; color: #10b981;">${totForm}</strong></div>`;
     }
-
-    if(html === '') {
-        html = `<div class='mensagem-vazia'>Nenhuma comissão gerada neste período.</div>`;
-    } else {
-        html += `<div style="display:flex; justify-content:space-between; align-items:center; padding-top: 15px; margin-top: 10px;">
-                    <strong style="font-size: 16px; color: var(--cor-texto);">TOTAL EXTRATO</strong>
-                    <strong style="font-size: 18px; color: var(--primary);">R$ ${totalExtrato.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2})}</strong>
-                 </div>`;
-    }
-
-    document.getElementById('lista-extrato-comissao').innerHTML = html;
-    document.getElementById('modal-extrato-comissao').classList.add('ativo');
-    loadIcons();
+    if(html === '') { html = `<div class='mensagem-vazia'>Nenhuma comissão gerada neste período.</div>`; } else { html += `<div style="display:flex; justify-content:space-between; align-items:center; padding-top: 15px; margin-top: 10px;"><strong style="font-size: 16px; color: var(--cor-texto);">TOTAL EXTRATO</strong><strong style="font-size: 18px; color: var(--primary);">R$ ${totalExtrato.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2})}</strong></div>`; }
+    document.getElementById('lista-extrato-comissao').innerHTML = html; document.getElementById('modal-extrato-comissao').classList.add('ativo'); loadIcons();
 }
 
-function fecharModalExtrato() { 
-    document.getElementById('modal-extrato-comissao').classList.remove('ativo'); 
-}
+function fecharModalExtrato() { document.getElementById('modal-extrato-comissao').classList.remove('ativo'); }
 
-// LOGICA BLINDADA DE FILTROS EM CASCATA
 window.mudouRegionalDash = function() {
-    let selReg = document.getElementById('filtro-regional-dash');
-    let selSup = document.getElementById('filtro-supervisor-dash');
-    let regVal = (usuarioLogado.cargo === "regional") ? usuarioLogado.id : (selReg ? selReg.value : "todos");
-    let htmlOp = '<option value="todos">Todas as Equipes (Supervisores)</option>';
-
+    let selReg = document.getElementById('filtro-regional-dash'); let selSup = document.getElementById('filtro-supervisor-dash'); let regVal = (usuarioLogado.cargo === "regional") ? usuarioLogado.id : (selReg ? selReg.value : "todos"); let htmlOp = '<option value="todos">Todas as Equipes (Supervisores)</option>';
     for (let k in bancoUsuarios) {
         if (bancoUsuarios[k].cargo === "supervisor") {
-            if (regVal === "todos") {
-                if (podeGerenciar(usuarioLogado, k)) htmlOp += `<option value="${k}">Equipe: ${bancoUsuarios[k].nome || k}</option>`;
-            } else {
-                let objRegional = bancoUsuarios[regVal];
-                let check1 = bancoUsuarios[k].criadoPor === regVal; // Direto do regional
-                let check2 = objRegional && bancoUsuarios[k].regiao === objRegional.regiao; // Pela região
+            if (regVal === "todos") { if (podeGerenciar(usuarioLogado, k)) htmlOp += `<option value="${k}">Equipe: ${bancoUsuarios[k].nome || k}</option>`; } else {
+                let objRegional = bancoUsuarios[regVal]; let check1 = bancoUsuarios[k].criadoPor === regVal; let check2 = objRegional && bancoUsuarios[k].regiao === objRegional.regiao;
                 if (check1 || check2) htmlOp += `<option value="${k}">Equipe: ${bancoUsuarios[k].nome || k}</option>`;
             }
         }
     }
-    if (selSup) selSup.innerHTML = htmlOp;
-    mudouSupervisorDash();
+    if (selSup) selSup.innerHTML = htmlOp; mudouSupervisorDash();
 };
 
 window.mudouSupervisorDash = function() { atualizarFiltroPromotorDash(); };
 
 function atualizarFiltroPromotorDash() {
-    let selSup = document.getElementById('filtro-supervisor-dash');
-    let supVal = selSup ? selSup.value : "todos";
-    let selProm = document.getElementById('filtro-promotor-dash');
-    let promotorAtual = selProm ? selProm.value : "todos";
-    let htmlOp = '<option value="todos">Todos os Promotores</option>';
-
-    let selReg = document.getElementById('filtro-regional-dash');
-    let regVal = (usuarioLogado.cargo === "regional") ? usuarioLogado.id : (selReg ? selReg.value : "todos");
-    let supAlvo = (usuarioLogado.cargo === "supervisor") ? usuarioLogado.id : supVal;
-
+    let selSup = document.getElementById('filtro-supervisor-dash'); let supVal = selSup ? selSup.value : "todos"; let selProm = document.getElementById('filtro-promotor-dash'); let promotorAtual = selProm ? selProm.value : "todos"; let htmlOp = '<option value="todos">Todos os Promotores</option>';
+    let selReg = document.getElementById('filtro-regional-dash'); let regVal = (usuarioLogado.cargo === "regional") ? usuarioLogado.id : (selReg ? selReg.value : "todos"); let supAlvo = (usuarioLogado.cargo === "supervisor") ? usuarioLogado.id : supVal;
     for (let k in bancoUsuarios) {
         if (bancoUsuarios[k].cargo === "promotor") {
-            let userProm = bancoUsuarios[k];
-            let userSup = bancoUsuarios[userProm.criadoPor];
-            
-            if (supAlvo !== "todos") {
-                if (userProm.criadoPor === supAlvo) htmlOp += `<option value="${k}">${userProm.nome || k}</option>`;
-            } else if (regVal !== "todos") {
-                let objRegional = bancoUsuarios[regVal];
-                let check1 = userProm.criadoPor === regVal;
-                let check2 = userSup && userSup.criadoPor === regVal;
-                let check3 = userSup && objRegional && userSup.regiao === objRegional.regiao;
+            let userProm = bancoUsuarios[k]; let userSup = bancoUsuarios[userProm.criadoPor];
+            if (supAlvo !== "todos") { if (userProm.criadoPor === supAlvo) htmlOp += `<option value="${k}">${userProm.nome || k}</option>`; } else if (regVal !== "todos") {
+                let objRegional = bancoUsuarios[regVal]; let check1 = userProm.criadoPor === regVal; let check2 = userSup && userSup.criadoPor === regVal; let check3 = userSup && objRegional && userSup.regiao === objRegional.regiao;
                 if (check1 || check2 || check3) htmlOp += `<option value="${k}">${userProm.nome || k}</option>`;
-            } else {
-                if(podeGerenciar(usuarioLogado, k)) htmlOp += `<option value="${k}">${userProm.nome || k}</option>`;
-            }
+            } else { if(podeGerenciar(usuarioLogado, k)) htmlOp += `<option value="${k}">${userProm.nome || k}</option>`; }
         }
     }
     if(selProm) { selProm.innerHTML = htmlOp; if (Array.from(selProm.options).some(opt => opt.value === promotorAtual)) selProm.value = promotorAtual; }
@@ -825,55 +831,31 @@ function atualizarFiltroPromotorDash() {
 }
 
 function atualizarFiltroLojaDash() {
-    let selProm = document.getElementById('filtro-promotor-dash');
-    let selLoja = document.getElementById('filtro-loja-dash');
-    if (!selLoja) return; 
-    let htmlOp = '<option value="todas">Todas as Lojas</option>';
-    let lojasDaBusca = new Set();
-    
+    let selProm = document.getElementById('filtro-promotor-dash'); let selLoja = document.getElementById('filtro-loja-dash'); if (!selLoja) return; let htmlOp = '<option value="todas">Todas as Lojas</option>'; let lojasDaBusca = new Set();
     if (usuarioLogado.cargo === "promotor") {
-        let lp = usuarioLogado.lojasPermitidas || [];
-        if (typeof lp === 'string') { try { lp = JSON.parse(lp); } catch(e){ lp = [lp]; } }
+        let lp = usuarioLogado.lojasPermitidas || []; if (typeof lp === 'string') { try { lp = JSON.parse(lp); } catch(e){ lp = [lp]; } }
         lp.forEach(l => lojasDaBusca.add(l));
     } else {
         let promotorAtual = selProm ? selProm.value : "todos";
         if (promotorAtual !== "todos") {
-            let userP = bancoUsuarios[promotorAtual];
-            if (userP && userP.lojasPermitidas) userP.lojasPermitidas.forEach(l => lojasDaBusca.add(l));
+            let userP = bancoUsuarios[promotorAtual]; if (userP && userP.lojasPermitidas) userP.lojasPermitidas.forEach(l => lojasDaBusca.add(l));
         } else {
-            let selSup = document.getElementById('filtro-supervisor-dash');
-            let supVal = (usuarioLogado.cargo === "supervisor") ? usuarioLogado.id : (selSup ? selSup.value : "todos");
-            let selReg = document.getElementById('filtro-regional-dash');
-            let regVal = (usuarioLogado.cargo === "regional") ? usuarioLogado.id : (selReg ? selReg.value : "todos");
-
-            if (supVal !== "todos") {
-                getLojasDaRegiao(supVal).forEach(l => lojasDaBusca.add(l));
-            } else if (regVal !== "todos") {
-                for (let k in bancoUsuarios) {
-                    if (bancoUsuarios[k].cargo === "supervisor" && (bancoUsuarios[k].criadoPor === regVal || bancoUsuarios[k].regiao === bancoUsuarios[regVal].regiao)) {
-                        getLojasDaRegiao(k).forEach(l => lojasDaBusca.add(l));
-                    }
-                }
-            } else {
-                Object.keys(lojasConfig).forEach(l => lojasDaBusca.add(l));
-            }
+            let selSup = document.getElementById('filtro-supervisor-dash'); let supVal = (usuarioLogado.cargo === "supervisor") ? usuarioLogado.id : (selSup ? selSup.value : "todos"); let selReg = document.getElementById('filtro-regional-dash'); let regVal = (usuarioLogado.cargo === "regional") ? usuarioLogado.id : (selReg ? selReg.value : "todos");
+            if (supVal !== "todos") { getLojasDaRegiao(supVal).forEach(l => lojasDaBusca.add(l)); } else if (regVal !== "todos") {
+                for (let k in bancoUsuarios) { if (bancoUsuarios[k].cargo === "supervisor" && (bancoUsuarios[k].criadoPor === regVal || bancoUsuarios[k].regiao === bancoUsuarios[regVal].regiao)) { getLojasDaRegiao(k).forEach(l => lojasDaBusca.add(l)); } }
+            } else { Object.keys(lojasConfig).forEach(l => lojasDaBusca.add(l)); }
         }
     }
-    Array.from(lojasDaBusca).sort().forEach(l => { htmlOp += `<option value="${l}">${l}</option>`; });
-    selLoja.innerHTML = htmlOp;
+    Array.from(lojasDaBusca).sort().forEach(l => { htmlOp += `<option value="${l}">${l}</option>`; }); selLoja.innerHTML = htmlOp;
 }
 
 window.mudouPromotorDash = function() { atualizarFiltroLojaDash(); abrirDashboard(); if(typeof carregarGraficosShare === 'function') carregarGraficosShare(); };
 function toggleComissao() { let elComissao = document.getElementById("total-comissao-geral"); let iconeOlho = document.getElementById("icone-olho-comissao"); if (elComissao.innerText === "R$ ****") { elComissao.innerText = elComissao.dataset.valor || "R$ 0,00"; iconeOlho.innerHTML = '<i data-lucide="eye-off" style="margin:0;"></i>'; } else { elComissao.innerText = "R$ ****"; iconeOlho.innerHTML = '<i data-lucide="eye" style="margin:0;"></i>'; } loadIcons(); }
 function isCampaignActiveInMonth(startStr, endStr, mesSelecionado) { return true; }
 
-// ==========================================
-// CÁLCULOS DO DASHBOARD, MATEMÁTICA E EXTRATO
-// ==========================================
 function gerarGraficos(dadosVendas) {
     if (!dadosVendas) dadosVendas = []; 
     let totalGeral = 0; let vendasPorLoja = {}; let vendasPorModelo = {}; let metricas = {}; let modelosFocoVendidos = {}; let rankingPorLoja = {}; 
-    
     let regiaoFoco = "todos"; let supervisorFoco = "todos"; let promotorFoco = "todos"; let lojaFoco = "todas";
 
     let elReg = document.getElementById('filtro-regional-dash'); if (elReg && elReg.parentElement.style.display !== "none") regiaoFoco = elReg.value; if (usuarioLogado.cargo === "regional") regiaoFoco = usuarioLogado.id;
@@ -903,51 +885,65 @@ function gerarGraficos(dadosVendas) {
 
     promotoresEscopo.forEach(k => {
         let supDoPromotor = bancoUsuarios[k].criadoPor;
-        let metaIndPromotor = bancoUsuarios[k].meta || 0; 
-        let metaPremPromotor = 0;
-        
-        if (bancoUsuarios[k].metaPremiumAbs !== undefined && bancoUsuarios[k].metaPremiumAbs !== "") { metaPremPromotor = Number(bancoUsuarios[k].metaPremiumAbs); } 
-        else { let taxaSup = taxasCoparticipacao[supDoPromotor] || taxasCoparticipacao["geral"] || 25; metaPremPromotor = Math.round(metaIndPromotor * (taxaSup / 100)); }
-
         let chaveAgrupamento = agrupamento === "supervisor" ? supDoPromotor : k;
         let nomeAgrupamento = bancoUsuarios[chaveAgrupamento] ? (bancoUsuarios[chaveAgrupamento].nome || chaveAgrupamento) : chaveAgrupamento;
 
-        if (!metricas[nomeAgrupamento]) { metricas[nomeAgrupamento] = { login: chaveAgrupamento, nome: nomeAgrupamento, metaPremium: 0, metaIndividual: 0, realizadoPremium: 0, realizadoGeral: 0, modelosPremiumVendidos: {}, modelosVendidosGeral: {}, comissaoAcumulada: 0, metasLinhas: bancoUsuarios[chaveAgrupamento] ? bancoUsuarios[chaveAgrupamento].metasLinhas || [] : [], realizadoLinhas: {} }; }
-        metricas[nomeAgrupamento].metaPremium += metaPremPromotor; metricas[nomeAgrupamento].metaIndividual += metaIndPromotor;
+        if (!metricas[nomeAgrupamento]) { 
+            metricas[nomeAgrupamento] = { 
+                login: chaveAgrupamento, nome: nomeAgrupamento, metaPremium: 0, metaIndividual: 0, 
+                realizadoPremium: 0, realizadoGeral: 0, modelosPremiumVendidos: {}, modelosVendidosGeral: {}, 
+                comissaoAcumulada: 0, metasLinhas: bancoUsuarios[chaveAgrupamento] ? bancoUsuarios[chaveAgrupamento].metasLinhas || [] : [], 
+                realizadoLinhas: {},
+                vendasPorLojaDetalhado: {} 
+            }; 
+        }
+        
+        let somaMetasPromotor = 0;
+        let lojasDestePromotor = bancoUsuarios[k].lojasPermitidas || [];
+        if (lojasDestePromotor.length > 0) {
+            lojasDestePromotor.forEach(l => {
+                if (lojaFoco !== "todas") {
+                    let lFormatada = l.toLowerCase().replace(/\s+/g,'').trim();
+                    let fFormatada = lojaFoco.toLowerCase().replace(/\s+/g,'').trim();
+                    if (lFormatada !== fFormatada && !lFormatada.includes(fFormatada) && !fFormatada.includes(lFormatada)) return;
+                }
+                
+                let metaDestaLoja = (bancoUsuarios[k].metasPorLoja && bancoUsuarios[k].metasPorLoja[l]) ? bancoUsuarios[k].metasPorLoja[l] : 0;
+                somaMetasPromotor += metaDestaLoja;
+
+                if (!metricas[nomeAgrupamento].vendasPorLojaDetalhado[l]) {
+                    metricas[nomeAgrupamento].vendasPorLojaDetalhado[l] = { geral: 0, premium: 0, meta: metaDestaLoja, capa: (lojasConfig[l] && lojasConfig[l].capa) ? lojasConfig[l].capa : 0 };
+                }
+            });
+        }
+        if (somaMetasPromotor === 0 && lojaFoco === "todas") { somaMetasPromotor = bancoUsuarios[k].meta || 0; } 
+
+        let taxaSup = taxasCoparticipacao[supDoPromotor] || taxasCoparticipacao["geral"] || 25; 
+        let metaPremPromotor = Math.round(somaMetasPromotor * (taxaSup / 100));
+
+        metricas[nomeAgrupamento].metaPremium += metaPremPromotor; 
+        metricas[nomeAgrupamento].metaIndividual += somaMetasPromotor;
     });
 
     dadosVendas.forEach(row => {
         let pKey = row.promotor_login; 
         let loja = (row.loja || "Outras").trim(); 
 
-        // ==========================================
-        // 🟢 FIX: REDIRECIONAMENTO DE VENDAS (SUPERVISOR -> PROMOTOR)
-        // Se quem lançou a venda NÃO for promotor (Supervisor/Diretor), o sistema
-        // transfere a venda automaticamente para o promotor que é dono dessa loja.
-        // ==========================================
         let usuarioVenda = bancoUsuarios[pKey];
         if (!usuarioVenda || usuarioVenda.cargo !== "promotor") {
             let donoDaLoja = Object.keys(bancoUsuarios).find(k => {
                 let u = bancoUsuarios[k];
-                return u.cargo === "promotor" && 
-                       u.lojasPermitidas && 
-                       u.lojasPermitidas.some(l => l.trim().toLowerCase() === loja.toLowerCase());
+                return u.cargo === "promotor" && u.lojasPermitidas && u.lojasPermitidas.some(l => l.trim().toLowerCase() === loja.toLowerCase());
             });
-            // Se achou o dono, repassa a venda pra ele ser pontuado e comissionado
-            if (donoDaLoja) {
-                pKey = donoDaLoja;
-            }
+            if (donoDaLoja) pKey = donoDaLoja;
         }
 
         if (!promotoresEscopo.has(pKey)) return; 
         
-        // 🟢 FILTRO TOLERANTE DE LOJAS
         if (lojaFoco !== "todas") {
-            let lojaFormatada = loja.toLowerCase().replace(/\s+/g, ' ').trim();
-            let focoFormatado = lojaFoco.toLowerCase().replace(/\s+/g, ' ').trim();
-            if (lojaFormatada !== focoFormatado && !lojaFormatada.includes(focoFormatado) && !focoFormatado.includes(lojaFormatada)) {
-                return;
-            }
+            let lojaFormatada = loja.toLowerCase().replace(/\s+/g, '').trim();
+            let focoFormatado = lojaFoco.toLowerCase().replace(/\s+/g, '').trim();
+            if (lojaFormatada !== focoFormatado && !lojaFormatada.includes(focoFormatado) && !focoFormatado.includes(lojaFormatada)) return;
         }
         
         let match = (row.Vendedor || "").match(/^\[(.*?)\]\s*(.*)$/); let vendNome = match ? match[2] : row.Vendedor;
@@ -970,12 +966,19 @@ function gerarGraficos(dadosVendas) {
             if (!vendasPorModelo[modeloFormatado]) vendasPorModelo[modeloFormatado] = 0; vendasPorModelo[modeloFormatado] += 1; 
             
             let checkPrem = ehPremium(ap, supervisorFoco !== "todos" ? supervisorFoco : "geral");
+
             if (visualizarVendedores && checkPrem) { vendNome.split(" e ").forEach(vN => { rankingPorLoja[loja][vN.trim()].qtdPremium += 1; }); }
 
             if (metricas[nomeAgrupamento]) {
                 metricas[nomeAgrupamento].realizadoGeral += 1; 
-                metricas[nomeAgrupamento].modelosVendidosGeral[chaveKey] = (metricas[nomeAgrupamento].modelosVendidosGeral[chaveKey] || 0) + 1; 
                 
+                if (!metricas[nomeAgrupamento].vendasPorLojaDetalhado[loja]) {
+                    metricas[nomeAgrupamento].vendasPorLojaDetalhado[loja] = { geral: 0, premium: 0, meta: 0, capa: 0 };
+                }
+                metricas[nomeAgrupamento].vendasPorLojaDetalhado[loja].geral += 1;
+                if (checkPrem) metricas[nomeAgrupamento].vendasPorLojaDetalhado[loja].premium += 1;
+                
+                metricas[nomeAgrupamento].modelosVendidosGeral[chaveKey] = (metricas[nomeAgrupamento].modelosVendidosGeral[chaveKey] || 0) + 1; 
                 if (metricas[nomeAgrupamento].metasLinhas) {
                     metricas[nomeAgrupamento].metasLinhas.forEach(ml => {
                         let arrModelosDestaLinha = ml.linha.split(',').map(s => s.trim());
@@ -991,30 +994,20 @@ function gerarGraficos(dadosVendas) {
         });
     });
 
-    let mesFiltro = ""; 
-    window.extratoComissaoAtual = {}; 
-
+    let mesFiltro = ""; window.extratoComissaoAtual = {}; 
     Object.values(metricas).forEach(m => {
         let comissaoUser = 0; let supkey = m.login; 
         if (bancoUsuarios[m.login] && bancoUsuarios[m.login].cargo === "promotor") { supkey = bancoUsuarios[m.login].criadoPor; }
-        
         let vComissaoSup = valoresComissao[supkey] || valoresComissao["geral"] || {}; 
         let grupos = vComissaoSup.grupos || []; let aparelhosCfg = vComissaoSup.aparelhos || {}; let campanhasAtivas = vComissaoSup.campanhasPersonalizadas || [];
-
         let volumePorGrupo = {}; grupos.forEach(g => volumePorGrupo[g.id] = 0);
+        for(let modChave in m.modelosVendidosGeral) { let qtdMod = m.modelosVendidosGeral[modChave]; let cfg = aparelhosCfg[modChave] || { tipo: 'nenhum' }; if (cfg.tipo === 'grupo' && cfg.grupoId && volumePorGrupo[cfg.grupoId] !== undefined) { volumePorGrupo[cfg.grupoId] += qtdMod; } }
         for(let modChave in m.modelosVendidosGeral) { 
             let qtdMod = m.modelosVendidosGeral[modChave]; let cfg = aparelhosCfg[modChave] || { tipo: 'nenhum' }; 
-            if (cfg.tipo === 'grupo' && cfg.grupoId && volumePorGrupo[cfg.grupoId] !== undefined) { volumePorGrupo[cfg.grupoId] += qtdMod; } 
-        }
-
-        for(let modChave in m.modelosVendidosGeral) { 
-            let qtdMod = m.modelosVendidosGeral[modChave]; let cfg = aparelhosCfg[modChave] || { tipo: 'nenhum' }; 
-            
             if (cfg.tipo === 'fixo') { 
                 let valFixo = Number(cfg.valorFixo) || 0; let ganho = qtdMod * valFixo; comissaoUser += ganho; 
                 if (ganho > 0) { let k = `${modChave.toUpperCase()} (Fixo)`; if(!window.extratoComissaoAtual[k]) window.extratoComissaoAtual[k] = { qtd:0, valorUnit: valFixo, total:0, isCampanha: false }; window.extratoComissaoAtual[k].qtd += qtdMod; window.extratoComissaoAtual[k].total += ganho; }
-            } 
-            else if (cfg.tipo === 'grupo' && cfg.grupoId) {
+            } else if (cfg.tipo === 'grupo' && cfg.grupoId) {
                 let g = grupos.find(x => x.id === cfg.grupoId);
                 if (g && cfg.valores) {
                     let volumeTotalGrupo = volumePorGrupo[cfg.grupoId] || 0; let nivelAlcancadoIdx = null; let maiorMeta = -1;
@@ -1024,8 +1017,7 @@ function gerarGraficos(dadosVendas) {
                         if(ganho > 0) { let k = `${modChave.toUpperCase()} (Cat: ${g.nome})`; if(!window.extratoComissaoAtual[k]) window.extratoComissaoAtual[k] = { qtd:0, valorUnit: payout, total:0, isCampanha: false }; window.extratoComissaoAtual[k].qtd += qtdMod; window.extratoComissaoAtual[k].total += ganho; }
                     }
                 }
-            } 
-            else if (cfg.tipo === undefined && (cfg.comissionado === true || cfg.comissionado === 'true')) {
+            } else if (cfg.tipo === undefined && (cfg.comissionado === true || cfg.comissionado === 'true')) {
                 let niveisGlobais = vComissaoSup.niveis || [{ id: 'l1', meta: 0 }, { id: 'l2', meta: 10 }];
                 let nivelAlcancado = 'l1'; let maiorMeta = -1; 
                 niveisGlobais.forEach(nv => { let metaParaNivel = (cfg[nv.id + '_meta'] !== undefined && cfg[nv.id + '_meta'] !== "") ? Number(cfg[nv.id + '_meta']) : nv.meta; if (m.realizadoGeral >= metaParaNivel && metaParaNivel >= maiorMeta) { nivelAlcancado = nv.id; maiorMeta = metaParaNivel; } }); 
@@ -1034,11 +1026,10 @@ function gerarGraficos(dadosVendas) {
                 if(ganho > 0) { let k = `${modChave.toUpperCase()} (Global)`; if(!window.extratoComissaoAtual[k]) window.extratoComissaoAtual[k] = { qtd:0, valorUnit: payout, total:0, isCampanha: false }; window.extratoComissaoAtual[k].qtd += qtdMod; window.extratoComissaoAtual[k].total += ganho; }
             }
         }
-
         campanhasAtivas.forEach(camp => { 
             if (isCampaignActiveInMonth(camp.dataInicio, camp.dataFim, mesFiltro)) { 
                 if (camp.promotorAlvo && camp.promotorAlvo !== 'todos' && camp.promotorAlvo !== m.login) { return; } 
-                let qtdParaBater = 0; if (camp.aparelho === 'todos') { qtdParaBater = m.realizadoPremium; } else { qtdParaBater = m.modelosVendidosGeral[camp.aparelho] || 0; } 
+                let qtdParaBater = camp.aparelho === 'todos' ? m.realizadoPremium : (m.modelosVendidosGeral[camp.aparelho] || 0); 
                 if (qtdParaBater >= Number(camp.qtdMinima)) { 
                     let ganho = qtdParaBater * Number(camp.bonus); comissaoUser += ganho; 
                     if(ganho > 0) { let k = `🎯 Bônus: ${camp.aparelho.toUpperCase()}`; if(!window.extratoComissaoAtual[k]) window.extratoComissaoAtual[k] = { qtd:0, valorUnit: Number(camp.bonus), total:0, isCampanha: true }; window.extratoComissaoAtual[k].qtd += qtdParaBater; window.extratoComissaoAtual[k].total += ganho; }
@@ -1071,7 +1062,15 @@ function gerarGraficos(dadosVendas) {
     let listaFocoHtml = ""; for(let mod in modelosFocoVendidos) { listaFocoHtml += `<span style="display:inline-block; background:var(--bg-item); color:var(--primary); padding:4px 8px; border-radius:6px; margin:2px; font-weight:bold; border: 1px solid var(--border-color);">${mod}: ${modelosFocoVendidos[mod]} un</span> `; } let htmlDetalhesCopart = `<div style="display: flex; flex-direction: column; gap: 8px;"><div style="display: flex; justify-content: space-between; font-size: 13px;"><span><i data-lucide="star" class="lucide-sm"></i> Foco Vendidos: <strong>${totalFocoVendidoGeral} un</strong></span><span style="color: #10b981; font-weight: bold;">Meta: ${pctMetaFocoGeral}%</span></div><div style="display: flex; justify-content: space-between; font-size: 13px;"><span><i data-lucide="pie-chart" class="lucide-sm"></i> Coparticipação Geral: <strong>${pctCopartGeral}%</strong></span></div><div style="margin-top: 5px;"><strong style="font-size: 11px; color: var(--cor-secundaria); display: block; margin-bottom: 3px;">Foco Vendidos no Período:</strong><div>${listaFocoHtml || "<span style='color:var(--cor-secundaria); font-style:italic;'>Nenhum foco vendido.</span>"}</div></div></div>`; document.getElementById("detalhe-coparticipacao-cards").innerHTML = htmlDetalhesCopart; loadIcons();
 
     try {
-        if (chartCoparticipacao) chartCoparticipacao.destroy(); if (chartCapa) chartCapa.destroy(); if (chartLojas) chartLojas.destroy(); if (chartModelos) chartModelos.destroy();
+        if (typeof Chart === 'undefined') {
+            console.warn("Chart.js não carregou a tempo.");
+            return; 
+        }
+
+        if (chartCoparticipacao) chartCoparticipacao.destroy(); 
+        if (chartCapa) chartCapa.destroy(); 
+        if (chartLojas) chartLojas.destroy(); 
+        if (chartModelos) chartModelos.destroy();
         let corTextoGrafico = document.body.classList.contains('dark-mode') ? '#f8fafc' : '#64748b'; Chart.defaults.color = corTextoGrafico; const pluginsArr = typeof ChartDataLabels !== 'undefined' ? [ChartDataLabels] : []; let labelsProm = Object.keys(metricas); let metasArr = labelsProm.map(p => metricas[p].metaPremium); let maxMeta = metasArr.length > 0 ? Math.max(...metasArr) : 10; if(maxMeta === -Infinity || maxMeta < 1) maxMeta = 10; 
         let widthProm = Math.max(100, labelsProm.length * 18); let wrapCapa = document.getElementById('wrap-graficoMetaPremiumCapa'); if(wrapCapa) wrapCapa.style.minWidth = widthProm + '%'; let wrapCopart = document.getElementById('wrap-graficoCoparticipacaoPromotores'); if(wrapCopart) wrapCopart.style.minWidth = widthProm + '%';
 
@@ -1082,30 +1081,41 @@ function gerarGraficos(dadosVendas) {
         let widthLojas = Math.max(100, lojasSort.length * 18); let wrapLojas = document.getElementById('wrap-graficoVendasLoja'); if(wrapLojas) wrapLojas.style.minWidth = widthLojas + '%';
         const ctxLojas = document.getElementById('graficoVendasLoja').getContext('2d'); chartLojas = new Chart(ctxLojas, { type: 'bar', plugins: pluginsArr, data: { labels: lojasSort, datasets: [{ data: lojasSort.map(l => vendasPorLoja[l]), backgroundColor: '#10b981', borderRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, layout: { padding: { top: 20 } }, scales: { x: { ticks: { display: false }, grid: { display: false } }, y: { beginAtZero: true } }, plugins: { legend: { display: false }, tooltip: { padding: 12, callbacks: { title: function(context) { return '🏪 ' + context[0].label; }, afterTitle: function(context) { let nomePromotor = getPromotorDaLoja(context[0].label); return '👤 Promotor: ' + nomePromotor; }, label: function(context) { return 'Total Vendido: ' + context.raw + ' un'; } } }, datalabels: { anchor: 'end', align: 'top', color: corTextoGrafico, font: { weight: 'bold' }, formatter: (val) => val + ' un' } } } });
 
-        let htmlCapaLojas = "";
-        for (let loja in vendasPorLoja) {
-            let vendido = vendasPorLoja[loja];
-            let capaLoja = lojasConfig[loja] && lojasConfig[loja].capa ? lojasConfig[loja].capa : 0;
-            if (capaLoja > 0) {
-                let pctCapa = Math.min(100, Math.round((vendido / capaLoja) * 100));
-                let corCapa = pctCapa >= 100 ? '#10b981' : (pctCapa >= 50 ? '#f59e0b' : '#ef4444');
-                htmlCapaLojas += `<div style="display:flex; flex-direction:column; gap:4px; margin-bottom:8px; font-size:12px; background:var(--bg-item); padding:10px 12px; border-radius:8px; border:1px solid var(--border-color);"><div style="display:flex; justify-content:space-between; font-weight:bold;"><span>🏪 ${loja}</span><span style="color:${corCapa};">${vendido} / ${capaLoja} un (${pctCapa}% da Capa)</span></div><div style="background:var(--bg-fundo); border-radius:4px; height:6px; width:100%; overflow:hidden; border:1px solid var(--border-color);"><div style="background:${corCapa}; width:${pctCapa}%; height:100%;"></div></div></div>`;
-            }
-        }
-        
-        let containerCapaId = 'resumo-capa-lojas-dash';
-        let containerCapaEl = document.getElementById(containerCapaId);
-        if (!containerCapaEl && document.getElementById('wrap-graficoVendasLoja')) {
-            let wrapLojas = document.getElementById('wrap-graficoVendasLoja').parentElement.parentElement;
-            containerCapaEl = document.createElement('div'); containerCapaEl.id = containerCapaId; containerCapaEl.style.cssText = "margin-top: 20px; border-top: 1px dashed var(--border-color); padding-top: 15px; text-align: left;"; wrapLojas.appendChild(containerCapaEl);
-        }
-        if (containerCapaEl) containerCapaEl.innerHTML = htmlCapaLojas ? `<h5 style="color:var(--cor-texto); margin-bottom:10px; font-size:13px;"><i data-lucide="layers" class="lucide-sm"></i> Ocupação da Capa por Loja:</h5>${htmlCapaLojas}` : "";
-
         let topModelos = Object.entries(vendasPorModelo).sort((a, b) => b[1] - a[1]); 
         const ctxModelos = document.getElementById('graficoTopModelos').getContext('2d'); 
         const paletaCores = ['#0086ff', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#38bdf8', '#fb923c', '#f472b6', '#2dd4bf', '#a78bfa', '#e879f9', '#94a3b8', '#fb7185', '#34d399', '#fbbf24', '#c084fc', '#4ade80'];
         
-        chartModelos = new Chart(ctxModelos, { type: 'doughnut', plugins: pluginsArr, data: { labels: topModelos.map(m => `${m[0]}`), datasets: [{ data: topModelos.map(m => m[1]), backgroundColor: topModelos.map((_, index) => paletaCores[index % paletaCores.length]) }] }, options: { maintainAspectRatio: false, responsive: true, plugins: { legend: { position: 'bottom', labels: { color: corTextoGrafico } }, datalabels: { color: '#fff', font: { weight: 'bold', size: 12 }, formatter: (value) => value > 0 ? value + ' un' : '' } } } });
+        let alturaDinamica = Math.max(260, topModelos.length * 40); 
+        let wrapModelos = document.getElementById('wrap-graficoTopModelos');
+        if(wrapModelos) wrapModelos.style.height = alturaDinamica + 'px';
+
+        chartModelos = new Chart(ctxModelos, { 
+            type: 'bar', 
+            plugins: pluginsArr, 
+            data: { 
+                labels: topModelos.map(m => `${m[0]}`), 
+                datasets: [{ 
+                    data: topModelos.map(m => m[1]), 
+                    backgroundColor: topModelos.map((_, index) => paletaCores[index % paletaCores.length]),
+                    borderRadius: 6
+                }] 
+            }, 
+            options: { 
+                indexAxis: 'y', 
+                maintainAspectRatio: false, 
+                responsive: true, 
+                layout: { padding: { right: 45 } },
+                scales: {
+                    x: { display: false, grid: { display: false } }, 
+                    y: { ticks: { color: corTextoGrafico, font: { weight: 'bold', size: 11 } }, grid: { display: false, drawBorder: false } }
+                },
+                plugins: { 
+                    legend: { display: false }, 
+                    tooltip: { callbacks: { label: function(context) { return ' Vendido: ' + context.raw + ' un'; } } },
+                    datalabels: { anchor: 'end', align: 'right', color: corTextoGrafico, font: { weight: 'bold', size: 12 }, formatter: (value) => value > 0 ? value + ' un' : '' } 
+                } 
+            } 
+        });
 
         if (chartHorariosPico) chartHorariosPico.destroy();
         if (chartPaceVisual) chartPaceVisual.destroy();
@@ -1113,6 +1123,26 @@ function gerarGraficos(dadosVendas) {
         let horasContador = { "08:00": 0, "09:00": 0, "10:00": 0, "11:00": 0, "12:00": 0, "13:00": 0, "14:00": 0, "15:00": 0, "16:00": 0, "17:00": 0, "18:00": 0, "19:00": 0, "20:00": 0, "21:00": 0 };
         
         dadosVendas.forEach(row => {
+            let pKey = row.promotor_login; 
+            let loja = (row.loja || "Outras").trim(); 
+
+            let usuarioVenda = bancoUsuarios[pKey];
+            if (!usuarioVenda || usuarioVenda.cargo !== "promotor") {
+                let donoDaLoja = Object.keys(bancoUsuarios).find(k => {
+                    let u = bancoUsuarios[k];
+                    return u.cargo === "promotor" && u.lojasPermitidas && u.lojasPermitidas.some(l => l.trim().toLowerCase() === loja.toLowerCase());
+                });
+                if (donoDaLoja) pKey = donoDaLoja;
+            }
+
+            if (!promotoresEscopo.has(pKey)) return; 
+
+            if (lojaFoco !== "todas") {
+                let lojaFormatada = loja.toLowerCase().replace(/\s+/g, '').trim();
+                let focoFormatado = lojaFoco.toLowerCase().replace(/\s+/g, '').trim();
+                if (lojaFormatada !== focoFormatado && !lojaFormatada.includes(focoFormatado) && !focoFormatado.includes(lojaFormatada)) return;
+            }
+
             if (row.Data) {
                 let d = new Date(row.Data);
                 if (!isNaN(d)) {
@@ -1147,44 +1177,76 @@ function gerarGraficos(dadosVendas) {
         }, 500);
     } catch(errG) { console.error("Erro interno nos gráficos:", errG); }
 }
+
 function renderizarRankingComercialDashboard(metricas, totalGeral, diasPassados) {
     let tbody = document.getElementById('ranking-table-body');
     if (!tbody) return;
 
-    let promotoresArray = Object.values(metricas).sort((a, b) => {
+    let linhasArray = [];
+    let totalFocoGlobal = 0; 
+    let metaGlobal = 0; 
+
+    Object.values(metricas).forEach(m => {
+        totalFocoGlobal += m.realizadoPremium; 
+        metaGlobal += m.metaIndividual;
+        
+        let lojasDaPessoa = Object.keys(m.vendasPorLojaDetalhado);
+        
+        if (lojasDaPessoa.length === 0) {
+            linhasArray.push({
+                nome: m.nome, login: m.login, loja: "Sem Lojas Vinculadas",
+                realizadoGeral: m.realizadoGeral, realizadoPremium: m.realizadoPremium,
+                meta: m.metaIndividual, capa: 0
+            });
+        } else {
+            lojasDaPessoa.forEach(lojaNome => {
+                let d = m.vendasPorLojaDetalhado[lojaNome];
+                linhasArray.push({
+                    nome: m.nome, login: m.login, loja: lojaNome,
+                    realizadoGeral: d.geral || 0, realizadoPremium: d.premium || 0,
+                    meta: d.meta || 0, capa: d.capa || 0
+                });
+            });
+        }
+    });
+
+    linhasArray.sort((a, b) => {
         if (b.realizadoGeral !== a.realizadoGeral) return b.realizadoGeral - a.realizadoGeral;
         return b.realizadoPremium - a.realizadoPremium;
     });
 
-    let totalFocoGlobal = 0; let metaGlobal = 0; let htmlLinhas = "";
+    let htmlLinhas = "";
 
-    promotoresArray.forEach((m, index) => {
-        totalFocoGlobal += m.realizadoPremium; metaGlobal += m.metaIndividual;
-        let pos = index + 1; let posHtml = `${pos}º`;
-        if (pos === 1) posHtml = `<span class="rk-medal ouro">1</span>`; else if (pos === 2) posHtml = `<span class="rk-medal prata">2</span>`; else if (pos === 3) posHtml = `<span class="rk-medal bronze">3</span>`;
+    linhasArray.forEach((linha, index) => {
+        let pos = index + 1; 
+        let posHtml = `${pos}º`;
+        if (pos === 1) posHtml = `<span class="rk-medal ouro">1</span>`; 
+        else if (pos === 2) posHtml = `<span class="rk-medal prata">2</span>`; 
+        else if (pos === 3) posHtml = `<span class="rk-medal bronze">3</span>`;
 
-        let strLojas = "N/A"; let capaTotal = 0; let userObj = bancoUsuarios[m.login];
-        if (userObj && userObj.lojasPermitidas && userObj.lojasPermitidas.length > 0) { 
-            strLojas = userObj.lojasPermitidas.join(", "); 
-            userObj.lojasPermitidas.forEach(loja => { if(lojasConfig[loja] && lojasConfig[loja].capa) capaTotal += lojasConfig[loja].capa; }); 
-        }
+        let atingimentoNum = linha.meta > 0 ? (linha.realizadoGeral / linha.meta) * 100 : 0;
+        let atingimentoStr = atingimentoNum.toFixed(1) + "%";
+        
+        let corFundoAting = "transparent"; let corTextoAting = "var(--cor-texto)";
+        if(linha.meta > 0) {
+            if (atingimentoNum === 0) { corFundoAting = "rgba(239, 68, 68, 0.15)"; corTextoAting = "#ef4444"; } 
+            else if (atingimentoNum < 40) { corFundoAting = "rgba(245, 158, 11, 0.15)"; corTextoAting = "#f59e0b"; } 
+            else { corFundoAting = "rgba(16, 185, 129, 0.15)"; corTextoAting = "#10b981"; }
+        } else { corTextoAting = "var(--cor-secundaria)"; }
 
-        let atingimento = m.metaIndividual > 0 ? ((m.realizadoGeral / m.metaIndividual) * 100).toFixed(1) : "0.0";
-        let classeAting = parseFloat(atingimento) >= 100 ? "ating-bom" : "ating-ruim";
-        let mks = capaTotal > 0 ? ((m.realizadoGeral / capaTotal) * 100).toFixed(1) : "0.0";
-        let mediaDia = diasPassados > 0 ? (m.realizadoGeral / diasPassados).toFixed(1) : "0.0";
-        let partFoco = m.realizadoGeral > 0 ? ((m.realizadoPremium / m.realizadoGeral) * 100).toFixed(1) : "0.0";
+        let mks = linha.capa > 0 ? ((linha.realizadoGeral / linha.capa) * 100).toFixed(1) : "0.0";
+        let mediaDia = diasPassados > 0 ? (linha.realizadoGeral / diasPassados).toFixed(1) : "0.0";
+        let partFoco = linha.realizadoGeral > 0 ? ((linha.realizadoPremium / linha.realizadoGeral) * 100).toFixed(1) : "0.0";
 
-        // 🟢 CORREÇÃO: Removido o corte de texto (ellipsis) e adicionado quebra de linha (white-space: normal; line-height: 1.4)
         htmlLinhas += `<tr>
             <td>${posHtml}</td>
-            <td style="text-align: left; font-weight: 800; color: #f8fafc;">${m.nome}</td>
-            <td style="color: #94a3b8; font-size: 11px; min-width: 150px; max-width: 250px; white-space: normal; line-height: 1.4; padding: 8px;" title="${strLojas}">${strLojas}</td>
-            <td style="font-size: 16px; font-weight: 900; color: #f8fafc; background-color: rgba(30, 58, 138, 0.2);">${m.realizadoGeral}</td>
-            <td style="font-size: 16px; font-weight: 900; color: #10b981; background-color: rgba(6, 78, 59, 0.2);">${m.realizadoPremium}</td>
-            <td>${m.metaIndividual}</td>
-            <td class="${classeAting}">${atingimento}%</td>
-            <td>${capaTotal}</td>
+            <td style="text-align: left; font-weight: 800; color: var(--cor-texto);">${linha.nome}</td>
+            <td style="text-align: left; font-weight: 700; color: var(--cor-secundaria); padding: 12px 8px;">${linha.loja}</td>
+            <td style="font-size: 16px; font-weight: 900; color: var(--primary); background-color: rgba(0, 134, 255, 0.1);">${linha.realizadoGeral}</td>
+            <td style="font-size: 16px; font-weight: 900; color: #10b981; background-color: rgba(16, 185, 129, 0.1);">${linha.realizadoPremium}</td>
+            <td>${linha.meta}</td>
+            <td style="font-weight: 900; background-color: ${corFundoAting}; color: ${corTextoAting};">${atingimentoStr}</td>
+            <td>${linha.capa}</td>
             <td>${mks}%</td>
             <td>${mediaDia}</td>
             <td>${partFoco}%</td>
@@ -1193,31 +1255,160 @@ function renderizarRankingComercialDashboard(metricas, totalGeral, diasPassados)
 
     tbody.innerHTML = htmlLinhas || "<tr><td colspan='11'>Sem dados no período</td></tr>";
 
-    let atingimentoGlobal = metaGlobal > 0 ? ((totalGeral / metaGlobal) * 100).toFixed(1) : "0.0";
-    let mediaVendedor = promotoresArray.length > 0 ? (totalGeral / promotoresArray.length).toFixed(1) : "0.0";
+    let atingimentoGlobalNum = metaGlobal > 0 ? (totalGeral / metaGlobal) * 100 : 0;
+    let totalPromotores = Object.keys(metricas).length;
+    let mediaVendedor = totalPromotores > 0 ? (totalGeral / totalPromotores).toFixed(1) : "0.0";
     let penetracaoFoco = totalGeral > 0 ? ((totalFocoGlobal / totalGeral) * 100).toFixed(1) : "0.0";
     
-    document.getElementById('rk-total-vendas').innerText = totalGeral; document.getElementById('rk-meta-total').innerText = `${metaGlobal} UN`; document.getElementById('rk-atingimento-global').innerText = `${atingimentoGlobal}%`; document.getElementById('rk-media-vendedor').innerText = `${mediaVendedor} UN`; document.getElementById('rk-total-foco').innerText = totalFocoGlobal; document.getElementById('rk-penetracao-foco').innerText = `${penetracaoFoco}%`;
+    let hoje = new Date();
+    let diasNoMesAtual = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).getDate();
+    let diasUteisRestantes = typeof calcularDiasUteisRestantes === 'function' ? calcularDiasUteisRestantes() : 0;
+    let pctMes = ((diasPassados / diasNoMesAtual) * 100).toFixed(1);
+    
+    let projecaoPace = Math.round((totalGeral / diasPassados) * diasNoMesAtual);
+    let projecaoPct = metaGlobal > 0 ? ((projecaoPace / metaGlobal) * 100).toFixed(1) : 0;
+    
+    document.getElementById('rk-total-vendas').innerText = totalGeral; 
+    document.getElementById('rk-meta-total').innerText = `${metaGlobal} UN`; 
+    document.getElementById('rk-atingimento-global').innerText = `${atingimentoGlobalNum.toFixed(1)}%`; 
+    document.getElementById('rk-media-vendedor').innerText = `${mediaVendedor} UN`; 
+    document.getElementById('rk-total-foco').innerText = totalFocoGlobal; 
+    document.getElementById('rk-penetracao-foco').innerText = `${penetracaoFoco}%`;
 
-    if (promotoresArray.length > 0 && promotoresArray[0].realizadoGeral > 0) { document.getElementById('rk-lider-nome').innerText = promotoresArray[0].nome; document.getElementById('rk-lider-vendas').innerText = `${promotoresArray[0].realizadoGeral} Vendas`; } else { document.getElementById('rk-lider-nome').innerText = "---"; document.getElementById('rk-lider-vendas').innerText = "0 Vendas"; }
+    let elDias = document.getElementById('rk-dias-uteis'); if(elDias) elDias.innerText = diasUteisRestantes;
+    let elMes = document.getElementById('rk-dias-corridos'); if(elMes) elMes.innerText = `${pctMes}%`;
+    let elPace = document.getElementById('rk-projecao-pace'); if(elPace) elPace.innerText = projecaoPace;
+    let elPacePct = document.getElementById('rk-projecao-pct'); if(elPacePct) elPacePct.innerText = `${projecaoPct}%`;
+
+    let promotoresArray = Object.values(metricas).sort((a, b) => {
+        if (b.realizadoGeral !== a.realizadoGeral) return b.realizadoGeral - a.realizadoGeral;
+        return b.realizadoPremium - a.realizadoPremium;
+    });
+
+    if (promotoresArray.length > 0 && promotoresArray[0].realizadoGeral > 0) { 
+        document.getElementById('rk-lider-nome').innerText = promotoresArray[0].nome; 
+        document.getElementById('rk-lider-vendas').innerText = `${promotoresArray[0].realizadoGeral} Vendas`; 
+    } else { 
+        document.getElementById('rk-lider-nome').innerText = "---"; 
+        document.getElementById('rk-lider-vendas').innerText = "0 Vendas"; 
+    }
     if (typeof lucide !== 'undefined') lucide.createIcons();
 }
 
-function setFiltroDataRapidoDash(tipo) {
-    let inputInicio = document.getElementById('dash-data-inicio'); let inputFim = document.getElementById('dash-data-fim'); if (!inputInicio || !inputFim) return;
-    let hoje = new Date(); let formatarData = (d) => { let ano = d.getFullYear(); let mes = String(d.getMonth() + 1).padStart(2, '0'); let dia = String(d.getDate()).padStart(2, '0'); return `${ano}-${mes}-${dia}`; };
+window.abrirModalShare = function() {
+    let selPromotor = document.getElementById('select-promotor-share');
+    let labelPromotor = document.getElementById('label-promotor-share');
+    let selLoja = document.getElementById('select-loja-share');
+    let divMarcas = document.getElementById('container-inputs-concorrencia');
+
+    if (usuarioLogado.cargo === "promotor") {
+        if (selPromotor) selPromotor.style.display = "none";
+        if (labelPromotor) labelPromotor.style.display = "none";
+        
+        let lojas = usuarioLogado.lojasPermitidas || [];
+        lojas.sort((a,b) => a.localeCompare(b, undefined, {numeric: true, sensitivity: 'base'}));
+        let htmlLoja = ''; lojas.forEach(l => htmlLoja += `<option value="${l}">${l}</option>`);
+        if (selLoja) selLoja.innerHTML = htmlLoja || '<option value="">Nenhuma loja vinculada</option>';
+    } else {
+        if (selPromotor) selPromotor.style.display = "block";
+        if (labelPromotor) labelPromotor.style.display = "block";
+
+        let htmlProm = '<option value="todos">Todos (Visão Geral da Região)</option>';
+        let promotores = [];
+        for (let k in bancoUsuarios) {
+            if (bancoUsuarios[k].cargo === "promotor") {
+                if (usuarioLogado.cargo === "supervisor" && bancoUsuarios[k].criadoPor !== usuarioLogado.id) continue;
+                if (usuarioLogado.cargo === "regional" && bancoUsuarios[k].regiao !== usuarioLogado.regiao && (!bancoUsuarios[bancoUsuarios[k].criadoPor] || bancoUsuarios[bancoUsuarios[k].criadoPor].regiao !== usuarioLogado.regiao)) continue;
+                promotores.push(k);
+            }
+        }
+        promotores.sort((a, b) => (bancoUsuarios[a].nome || a).localeCompare(bancoUsuarios[b].nome || b));
+        promotores.forEach(p => { htmlProm += `<option value="${p}">${bancoUsuarios[p].nome || p}</option>`; });
+        
+        if (selPromotor) { selPromotor.innerHTML = htmlProm; selPromotor.value = "todos"; }
+        window.filtrarLojasShare();
+    }
     
-    if (tipo === 'hoje') { let strHoje = formatarData(hoje); inputInicio.value = strHoje; inputFim.value = strHoje; } 
-    else if (tipo === 'ontem') { let ontem = new Date(); ontem.setDate(hoje.getDate() - 1); let strOntem = formatarData(ontem); inputInicio.value = strOntem; inputFim.value = strOntem; } 
-    else if (tipo === 'semana') { let inicioSemana = new Date(); inicioSemana.setDate(hoje.getDate() - 7); inputInicio.value = formatarData(inicioSemana); inputFim.value = formatarData(hoje); } 
-    else if (tipo === 'mes') { let inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1); inputInicio.value = formatarData(inicioMes); inputFim.value = formatarData(hoje); } 
-    else if (tipo === 'limpar') { inputInicio.value = ""; inputFim.value = ""; }
-    forcarAtualizacaoDashboard();
+    let supId = "geral";
+    if (usuarioLogado.cargo === "promotor") supId = usuarioLogado.criadoPor;
+    else if (usuarioLogado.cargo === "supervisor") supId = usuarioLogado.id;
+    
+    let vComissaoSup = valoresComissao[supId] || valoresComissao["geral"] || {};
+    let marcas = vComissaoSup.marcas_concorrentes || ["Samsung", "Motorola", "Outros"];
+
+    let htmlMarcas = '';
+    marcas.forEach(marca => {
+        let marcaId = marca.replace(/[^a-zA-Z0-9]/g, '');
+        htmlMarcas += `
+        <div style="background: var(--bg-container); border: 1px solid var(--border-color); padding: 12px; border-radius: 8px; display: flex; flex-direction: column; align-items: flex-start; gap: 6px;">
+            <span style="font-size: 12px; font-weight: bold; color: var(--cor-secundaria);">${marca}</span>
+            <input type="number" id="input-concorrente-${marcaId}" data-marca="${marca}" placeholder="Vendas" style="width: 100%; padding: 10px; margin: 0; background: var(--bg-fundo); border: 1px solid var(--border-color); border-radius: 8px;">
+        </div>`;
+    });
+    if (divMarcas) divMarcas.innerHTML = htmlMarcas;
+
+    document.getElementById('modal-fechamento-share').classList.add('ativo');
 }
 
-// ==========================================
-// FIX: LEITURA E ENVIO DO MARKET SHARE (SUPABASE)
-// ==========================================
+window.filtrarLojasShare = function() {
+    let selPromotor = document.getElementById('select-promotor-share');
+    let selLoja = document.getElementById('select-loja-share');
+    if (!selLoja || !selPromotor) return;
+
+    let promAlvo = selPromotor.value;
+    let lojas = [];
+
+    if (promAlvo === "todos") {
+        if (typeof getLojasDaRegiao === "function") lojas = getLojasDaRegiao(usuarioLogado.id);
+        else lojas = Object.keys(lojasConfig); 
+    } else { lojas = bancoUsuarios[promAlvo].lojasPermitidas || []; }
+
+    lojas.sort((a,b) => a.localeCompare(b, undefined, {numeric: true, sensitivity: 'base'}));
+    let htmlLoja = ''; lojas.forEach(l => htmlLoja += `<option value="${l}">${l}</option>`);
+    selLoja.innerHTML = htmlLoja || '<option value="">Nenhuma loja vinculada</option>';
+}
+
+async function enviarFechamentoShare() {
+    if (!navigator.onLine) { mostrarToast("Sem internet!", "erro"); return; }
+    let loja = document.getElementById('select-loja-share').value;
+    if (!loja) return mostrarToast("Selecione uma loja.", "alerta");
+    
+    let totalConcorrencia = 0; let objConcorrentes = {};
+    let inputs = document.querySelectorAll('[id^="input-concorrente-"]');
+    
+    inputs.forEach(inp => {
+        let qtd = parseInt(inp.value) || 0;
+        let marca = inp.getAttribute('data-marca');
+        if (marca) { objConcorrentes[marca] = qtd; totalConcorrencia += qtd; }
+    });
+
+    if (totalConcorrencia === 0) return mostrarToast("Preencha as vendas da concorrência.", "alerta");
+
+    const btn = document.getElementById("btn-salvar-share"); btn.disabled = true;
+    btn.innerHTML = '<i data-lucide="loader-2" style="animation: spin 1s linear infinite;"></i> Salvando na nuvem...'; loadIcons();
+
+    let promotor_fechamento = usuarioLogado.id;
+    if (usuarioLogado.cargo !== "promotor") {
+        let selProm = document.getElementById('select-promotor-share');
+        if (selProm && selProm.value !== "todos") { promotor_fechamento = selProm.value; } 
+        else { let dono = Object.keys(bancoUsuarios).find(k => bancoUsuarios[k].cargo === "promotor" && bancoUsuarios[k].lojasPermitidas && bancoUsuarios[k].lojasPermitidas.includes(loja)); if (dono) promotor_fechamento = dono; }
+    }
+
+    let supId = (usuarioLogado && usuarioLogado.criadoPor) ? usuarioLogado.criadoPor : (usuarioLogado ? usuarioLogado.id : 'master');
+
+    let payload = {
+        data_fechamento: new Date().toISOString().split('T')[0], loja: loja, promotor_login: promotor_fechamento,
+        vendas_oppo: 0, vendas_total_loja: totalConcorrencia, criado_por_supervisor: supId, concorrentes_dados: objConcorrentes 
+    };
+
+    try {
+        const { error } = await supabaseClient.from('market_share').insert([payload]);
+        if (error) { console.error("Erro do Supabase:", error); throw error; }
+        mostrarToast("Fechamento registrado com sucesso no banco!", "sucesso");
+        document.getElementById('modal-fechamento-share').classList.remove('ativo');
+        if (typeof carregarGraficosShare === 'function') carregarGraficosShare();
+    } catch (e) { console.error("Erro no Share:", e); mostrarToast("Erro ao registrar fechamento no Supabase.", "erro"); } finally { btn.disabled = false; btn.innerHTML = 'Salvar Fechamento'; loadIcons(); }
+}
 
 async function carregarGraficosShare() {
     if (!navigator.onLine) { mostrarToast("Sem conexão.", "erro"); return; }
@@ -1243,14 +1434,11 @@ async function carregarGraficosShare() {
         let cProm = document.getElementById('container-filtro-promotor-dash'); let isPromVisible = cProm && cProm.style.display !== "none";
 
         let escopoTexto = "no mercado analisado"; 
-        
         let regAlvo = (usuarioLogado.cargo === "regional") ? usuarioLogado.id : (isRegVisible && selReg ? selReg.value : "todos");
         let supAlvo = (usuarioLogado.cargo === "supervisor") ? usuarioLogado.id : (isSupVisible && selSup ? selSup.value : "todos");
         let promAlvo = (isPromVisible && selProm) ? selProm.value : "todos";
 
-        // Monta o conjunto de lojas pertencentes ao filtro ativo na pirâmide
         let lojasDaBusca = new Set();
-
         if (usuarioLogado.cargo === "promotor") {
             let lp = usuarioLogado.lojasPermitidas || [];
             if (typeof lp === 'string') { try { lp = JSON.parse(lp); } catch(e){ lp = [lp]; } }
@@ -1261,16 +1449,12 @@ async function carregarGraficosShare() {
             if (uP && uP.lojasPermitidas) uP.lojasPermitidas.forEach(l => lojasDaBusca.add(l));
             escopoTexto = "nas lojas do promotor";
         } else if (supAlvo !== "todos") {
-            if (typeof getLojasDaRegiao === "function") {
-                getLojasDaRegiao(supAlvo).forEach(l => lojasDaBusca.add(l));
-            }
+            if (typeof getLojasDaRegiao === "function") { getLojasDaRegiao(supAlvo).forEach(l => lojasDaBusca.add(l)); }
             escopoTexto = "na equipe filtrada";
         } else if (regAlvo !== "todos") {
             for (let k in bancoUsuarios) {
                 if (bancoUsuarios[k].cargo === "supervisor" && (bancoUsuarios[k].criadoPor === regAlvo || (bancoUsuarios[regAlvo] && bancoUsuarios[k].regiao === bancoUsuarios[regAlvo].regiao))) {
-                    if (typeof getLojasDaRegiao === "function") {
-                        getLojasDaRegiao(k).forEach(l => lojasDaBusca.add(l));
-                    }
+                    if (typeof getLojasDaRegiao === "function") { getLojasDaRegiao(k).forEach(l => lojasDaBusca.add(l)); }
                 }
             }
             escopoTexto = "na região filtrada";
@@ -1279,15 +1463,11 @@ async function carregarGraficosShare() {
         }
 
         const { data: dbShare, error } = await query;
-        if (error) {
-            console.error("Erro do Supabase ao buscar Market Share:", error);
-            throw error;
-        }
+        if (error) { console.error("Erro do Supabase:", error); throw error; }
 
         let resumoGlobal = { oppo: 0, concorrentes: {}, total: 0 };
         let resumoLojas = {};
 
-        // 1. Puxa vendas OPPO (Vendas internas registradas)
         if (typeof dadosAcompanhamentoGlobal !== 'undefined') {
             dadosAcompanhamentoGlobal.forEach(row => {
                 let match = (row.Vendedor || "").match(/^\[(.*?)\]/);
@@ -1297,25 +1477,20 @@ async function carregarGraficosShare() {
                 if (selLoja && selLoja.value !== "todas" && lojaNome !== selLoja.value) return;
 
                 let qtd = (row.Aparelhos || "").split("||").filter(x => x.trim() !== "").length;
-                resumoGlobal.oppo += qtd;
-                resumoGlobal.total += qtd; 
+                resumoGlobal.oppo += qtd; resumoGlobal.total += qtd; 
                 
                 if (!resumoLojas[lojaNome]) resumoLojas[lojaNome] = { oppo: 0, total: 0 };
-                resumoLojas[lojaNome].oppo += qtd;
-                resumoLojas[lojaNome].total += qtd;
+                resumoLojas[lojaNome].oppo += qtd; resumoLojas[lojaNome].total += qtd;
             });
         }
 
-        // 2. Puxa vendas da concorrência registradas no banco
         if (dbShare && dbShare.length > 0) {
             dbShare.forEach(row => {
                 if (lojasDaBusca.size > 0 && !lojasDaBusca.has(row.loja)) return;
                 if (selLoja && selLoja.value !== "todas" && row.loja !== selLoja.value) return;
 
                 let dadosConc = row.concorrentes_dados || {};
-                if (typeof dadosConc === 'string') {
-                    try { dadosConc = JSON.parse(dadosConc); } catch(e) { dadosConc = {}; }
-                }
+                if (typeof dadosConc === 'string') { try { dadosConc = JSON.parse(dadosConc); } catch(e) { dadosConc = {}; } }
 
                 let totalConcLinha = 0;
                 for (let marca in dadosConc) {
@@ -1332,10 +1507,8 @@ async function carregarGraficosShare() {
 
         if (resumoGlobal.total === 0) {
             if (chartShareGlobal) chartShareGlobal.destroy();
-            let txtEl = document.getElementById('texto-resumo-share');
-            if (txtEl) txtEl.innerHTML = "Nenhum dado registrado neste filtro.";
-            let listEl = document.getElementById('lista-temperatura-lojas');
-            if (listEl) listEl.innerHTML = "<div class='mensagem-vazia'>Sem dados.</div>";
+            let txtEl = document.getElementById('texto-resumo-share'); if (txtEl) txtEl.innerHTML = "Nenhum dado registrado neste filtro.";
+            let listEl = document.getElementById('lista-temperatura-lojas'); if (listEl) listEl.innerHTML = "<div class='mensagem-vazia'>Sem dados.</div>";
             return;
         }
 
@@ -1345,66 +1518,6 @@ async function carregarGraficosShare() {
     } catch (e) {
         console.error("Erro no cálculo do Share:", e);
         mostrarToast("Erro ao carregar dados do Market Share.", "erro");
-    }
-}
-
-async function enviarFechamentoShare() {
-    if (!navigator.onLine) { mostrarToast("Sem internet!", "erro"); return; }
-    let loja = document.getElementById('select-loja-share').value;
-    if (!loja) return mostrarToast("Selecione uma loja.", "alerta");
-    
-    let totalConcorrencia = 0; 
-    let objConcorrentes = {};
-    let inputs = document.querySelectorAll('[id^="input-concorrente-"]');
-    
-    inputs.forEach(inp => {
-        let qtd = parseInt(inp.value) || 0;
-        let marca = inp.getAttribute('data-marca');
-        if (marca) {
-            objConcorrentes[marca] = qtd;
-            totalConcorrencia += qtd;
-        }
-    });
-
-    if (totalConcorrencia === 0) return mostrarToast("Preencha as vendas da concorrência.", "alerta");
-
-    const btn = document.getElementById("btn-salvar-share");
-    btn.disabled = true;
-    btn.innerHTML = '<i data-lucide="loader-2" style="animation: spin 1s linear infinite;"></i> Salvando na nuvem...';
-    loadIcons();
-
-    let supId = (usuarioLogado && usuarioLogado.criadoPor) ? usuarioLogado.criadoPor : (usuarioLogado ? usuarioLogado.id : 'master');
-
-    let payload = {
-        data_fechamento: new Date().toISOString().split('T')[0],
-        loja: loja,
-        promotor_login: usuarioLogado ? usuarioLogado.id : 'master',
-        vendas_oppo: 0, 
-        vendas_total_loja: totalConcorrencia, 
-        criado_por_supervisor: supId,
-        concorrentes_dados: objConcorrentes 
-    };
-
-    try {
-        const { error } = await supabaseClient.from('market_share').insert([payload]);
-        if (error) {
-            console.error("Erro do Supabase ao inserir Share:", error);
-            throw error;
-        }
-        
-        mostrarToast("Fechamento registrado com sucesso no banco!", "sucesso");
-        document.getElementById('modal-fechamento-share').classList.remove('ativo');
-
-        // RECARREGA OS GRÁFICOS INSTANTANEAMENTE
-        if (typeof carregarGraficosShare === 'function') carregarGraficosShare();
-
-    } catch (e) {
-        console.error("Erro no Share:", e);
-        mostrarToast("Erro ao registrar fechamento no Supabase. Abra o F12 para detalhes.", "erro");
-    } finally {
-        btn.disabled = false;
-        btn.innerHTML = 'Salvar Fechamento';
-        loadIcons();
     }
 }
 
@@ -1453,11 +1566,10 @@ function exportarParaCSV(nomeArquivo, dados, colunas) {
 
 function baixarRelatorioAcomp() { if (typeof dadosAcompanhamentoGlobal === 'undefined' || dadosAcompanhamentoGlobal.length === 0) { return mostrarToast("Carregue os dados primeiro.", "alerta"); } exportarParaCSV("Acompanhamento_Vendas", dadosAcompanhamentoGlobal, ["Data", "Vendedor", "Aparelhos", "Status"]); }
 function baixarRelatorioHistorico() { if (typeof dadosHistoricoGlobal === 'undefined' || dadosHistoricoGlobal.length === 0) { return mostrarToast("Carregue o histórico primeiro.", "alerta"); } let dadosLimpos = dadosHistoricoGlobal.map(item => ({ Data: item.Data, Tipo: item.Tipo, Status: item.Status, Promotor: item.Promotor, Detalhe: item.Detalhe.replace(/<[^>]*>?/gm, '') })); exportarParaCSV("Historico_Auditoria", dadosLimpos, ["Data", "Tipo", "Status", "Promotor", "Detalhe"]); }
-// ==========================================
-// app.js - PARTE 10 DE 10 (BLOCO 1 ATUALIZADO)
-// Cofre, Painel Admin, Hierarquia e Transferências
-// ==========================================
 
+// ==========================================
+// PAINEL ADMIN, SEGURANÇA E AUTO-SAVE SETTINGS
+// ==========================================
 let acaoSegurancaPendente = null;
 
 function solicitarSenhaSeguranca(callbackAcao) {
@@ -1533,7 +1645,6 @@ function renderizarAdminUsuarios() {
         let u = bancoUsuarios[l]; if (u.cargo === "promotor" && usuarioLogado.id !== "master") continue; if (!podeGerenciar(usuarioLogado, l) && l !== usuarioLogado.id) continue;
         if (filtroCargo !== 'todos') { if (filtroCargo === 'regional' && u.cargo !== 'regional' && u.cargo !== 'gestor') continue; if (filtroCargo !== 'regional' && u.cargo !== filtroCargo) continue; }
         
-        // APLICA O FILTRO INTELIGENTE DE PIRÂMIDE
         if (filtroH !== 'todos') {
             let hObj = bancoUsuarios[filtroH];
             if (hObj) {
@@ -1556,17 +1667,12 @@ function renderizarAdminUsuarios() {
         let btnRegiao = (usuarioLogado.cargo === "gestor" || usuarioLogado.id === "master") && (u.cargo === "regional" || u.cargo === "gestor") ? `<button class="btn-editar" style="background-color: #8b5cf6; color:white; border:none;" onclick="adminAbrirModalRegiao('${l}')"><i data-lucide="globe"></i> Região</button>` : ""; 
         let btnSenha = `<button class="btn-editar" style="background-color: #f59e0b; color: white; border:none;" onclick="adminAbrirModalSenha('${l}')"><i data-lucide="key"></i> Senha</button>`; 
         let btnExcluir = (usuarioLogado.id === "master" && l !== "master") ? `<button class="btn-excluir" onclick="adminRemoverUsuario('${l}')"><i data-lucide="trash-2"></i></button>` : ""; 
-        
-        // NOVO BOTÃO: TRANSFERIR/VÍNCULO
         let btnVinculo = (usuarioLogado.cargo === "gestor" || usuarioLogado.id === "master") && (u.cargo === "supervisor" || u.cargo === "promotor") ? `<button class="btn-editar" style="background-color: #3b82f6; color:white; border:none;" onclick="adminAbrirModalVinculo('${l}')"><i data-lucide="link"></i> Mover</button>` : "";
 
         htmlContent += `<div class="linha-admin" style="flex-direction: column; align-items: stretch; padding: 16px; background: var(--bg-card); margin-bottom: 12px; border-radius: 16px; border: 1px solid var(--border-color);"><div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px dashed var(--border-color); padding-bottom: 10px; margin-bottom: 10px;"><div style="text-align: left;"><strong style="font-size: 16px;">${u.nome || l} <span style="font-size: 11px; color: var(--cor-secundaria);">(@${l})</span></strong><span style="font-size: 11px; color: var(--cor-secundaria); display:block; margin-top:4px;">${labelCargo}${subLabel}</span></div><div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; max-width: 180px;">${btnRegiao} ${btnVinculo} ${btnSenha} ${btnExcluir}</div></div>${btnGerenciar}</div>`; 
     } div.innerHTML = htmlContent || "<p style='color:var(--cor-secundaria); font-size:13px;'>Nenhum usuário encontrado.</p>"; loadIcons();
 }
 
-// ==========================================
-// FUNÇÃO MÁGICA DE TRANSFERÊNCIA NO SUPABASE
-// ==========================================
 function adminAbrirModalVinculo(login) { 
     let u = bancoUsuarios[login]; let cargo = u.cargo; 
     document.getElementById('modal-edicao-titulo').innerHTML = `<i data-lucide="link"></i> Mover Colaborador (@${login})`; 
@@ -1584,28 +1690,52 @@ function adminAbrirModalVinculo(login) {
     let btn = document.getElementById('btn-salvar-edicao'); 
     btn.onclick = async function() { 
         let novoPai = document.getElementById('input-edit-vinculo').value; if (!novoPai) return; 
-        
         let txtOriginal = btn.innerHTML; btn.innerHTML = '<i data-lucide="loader-2" style="animation: spin 1s linear infinite;"></i> Transferindo...'; btn.disabled = true; loadIcons();
         try { 
-            // O Promotor não muda de região, mas o Supervisor sim, herda a região do novo Regional.
             let novaRegiao = bancoUsuarios[novoPai] ? bancoUsuarios[novoPai].regiao : (cargo === 'supervisor' ? 'GLOBAL' : null); 
-            if (cargo === 'promotor') novaRegiao = u.regiao; // Promotor mantém o mesmo (nulo ou do bd)
-            
+            if (cargo === 'promotor') novaRegiao = u.regiao; 
             const { error } = await supabaseClient.from('usuarios').update({ criado_por: novoPai, regiao: novaRegiao }).eq('login', login); 
             if (error) throw error; 
-            
             bancoUsuarios[login].criadoPor = novoPai; 
             if (cargo === 'supervisor') bancoUsuarios[login].regiao = novaRegiao; 
-            
-            mostrarToast("Transferência concluída!", "sucesso"); 
-            fecharModalEdicao(); 
-            renderizarAdminUsuarios(); 
+            mostrarToast("Transferência concluída!", "sucesso"); fecharModalEdicao(); renderizarAdminUsuarios(); 
         } catch(e) { console.error(e); mostrarToast("Erro ao transferir no banco.", "erro"); } finally { btn.innerHTML = txtOriginal; btn.disabled = false; loadIcons(); } 
     }; 
     document.getElementById('modal-edicao').classList.add('ativo'); loadIcons(); 
 }
 
-function filtrarListaModal(classe, termo) { termo = termo.toLowerCase(); let itens = document.querySelectorAll('.' + classe); itens.forEach(item => { if(item.innerText.toLowerCase().includes(termo)) { item.style.display = "block"; } else { item.style.display = "none"; } }); }
+function filtrarListaModal(classe, termo) { termo = termo.toLowerCase(); let itens = document.querySelectorAll('.' + classe); itens.forEach(item => { if(item.innerText.toLowerCase().includes(termo)) { item.style.display = "flex"; } else { item.style.display = "none"; } }); }
+
+let usuarioAlvoAcoes = null;
+
+function abrirMenuAcoesUsuario(login, nome) {
+    usuarioAlvoAcoes = login;
+    document.getElementById('titulo-acoes-usuario').innerHTML = `<i data-lucide="user"></i> ${nome || login}`;
+    
+    // Adicionado o !important no var(--cor-texto) para garantir a leitura no tema claro
+    let htmlBotoes = `
+        <button class="btn-sistema" style="background: var(--bg-item); color: var(--cor-texto) !important; box-shadow: none; border: 1px solid var(--border-color); margin: 0; padding: 14px; display: flex; justify-content: flex-start; gap: 10px;" onclick="fecharMenuAcoesUsuario(); adminAbrirModalNome('${login}')"><i data-lucide="edit-3" style="color: var(--primary);"></i> Editar Nome</button>
+        <button class="btn-sistema" style="background: var(--bg-item); color: var(--cor-texto) !important; box-shadow: none; border: 1px solid var(--border-color); margin: 0; padding: 14px; display: flex; justify-content: flex-start; gap: 10px;" onclick="fecharMenuAcoesUsuario(); adminAbrirModalSenha('${login}')"><i data-lucide="key" style="color: #f59e0b;"></i> Alterar Senha</button>
+        <button class="btn-sistema" style="background: var(--bg-item); color: var(--cor-texto) !important; box-shadow: none; border: 1px solid var(--border-color); margin: 0; padding: 14px; display: flex; justify-content: flex-start; gap: 10px;" onclick="fecharMenuAcoesUsuario(); adminAbrirModalLojas('${login}')"><i data-lucide="store" style="color: #3b82f6;"></i> Vincular Lojas</button>
+        <button class="btn-sistema" style="background: var(--bg-item); color: var(--cor-texto) !important; box-shadow: none; border: 1px solid var(--border-color); margin: 0; padding: 14px; display: flex; justify-content: flex-start; gap: 10px;" onclick="fecharMenuAcoesUsuario(); adminAbrirModalMeta('${login}')"><i data-lucide="target" style="color: #8b5cf6;"></i> Metas da Loja</button>
+        <button class="btn-sistema" style="background: var(--bg-item); color: var(--cor-texto) !important; box-shadow: none; border: 1px solid var(--border-color); margin: 0; padding: 14px; display: flex; justify-content: flex-start; gap: 10px;" onclick="fecharMenuAcoesUsuario(); adminAbrirModalPermissoes('${login}')"><i data-lucide="shield" style="color: #10b981;"></i> Permissões de App</button>
+        <button class="btn-sistema" style="background: rgba(239, 68, 68, 0.1); color: #ef4444 !important; box-shadow: none; border: 1px dashed #ef4444; margin: 0; padding: 14px; display: flex; justify-content: flex-start; gap: 10px;" onclick="fecharMenuAcoesUsuario(); adminRemoverUsuarioModalEquipe('${login}')"><i data-lucide="trash-2"></i> Excluir Promotor</button>
+    `;
+    
+    document.getElementById('botoes-acoes-usuario').innerHTML = htmlBotoes;
+    document.getElementById('modal-acoes-usuario').classList.add('ativo');
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+function fecharMenuAcoesUsuario() { 
+    document.getElementById('modal-acoes-usuario').classList.remove('ativo'); 
+    usuarioAlvoAcoes = null; 
+}
+
+function toggleFormNovoPromotor() {
+    let form = document.getElementById('bloco-novo-promotor');
+    if (form.style.display === "none") { form.style.display = "block"; } else { form.style.display = "none"; }
+}
 
 function abrirPainelEquipe(login) { supervisorGerenciadoAtual = login; let supNome = bancoUsuarios[login].nome || login; let titulo = document.getElementById('titulo-modal-equipe'); if (titulo) titulo.innerHTML = `<i data-lucide="users"></i> Equipe de ${supNome}`; renderizarModalEquipe(); document.getElementById('modal-gerenciar-equipe').classList.add('ativo'); switchTab('equipe-tab-promotores', 'equipe-tab'); loadIcons(); }
 function fecharModalEquipe() { document.getElementById('modal-gerenciar-equipe').classList.remove('ativo'); supervisorGerenciadoAtual = null; }
@@ -1624,17 +1754,75 @@ function getLojasDaRegiao(supLogin) {
 
 function renderizarModalEquipe() {
     if(!supervisorGerenciadoAtual) return;
-    let divPromotores = document.getElementById('lista-modal-promotores'); let divLojas = document.getElementById('lista-modal-lojas'); let selLoja = document.getElementById('modal-select-loja'); let lojasDaRegiao = getLojasDaRegiao(supervisorGerenciadoAtual); 
+    let divPromotores = document.getElementById('lista-modal-promotores'); 
+    let divLojas = document.getElementById('lista-modal-lojas'); 
+    let selLoja = document.getElementById('modal-select-loja'); 
+    let lojasDaRegiao = getLojasDaRegiao(supervisorGerenciadoAtual); 
+    
     let promotoresArray = [];
-    for(let k in bancoUsuarios) { if(bancoUsuarios[k].cargo === "promotor" && (bancoUsuarios[k].criadoPor === supervisorGerenciadoAtual || usuarioLogado.id === "master")) { promotoresArray.push({ login: k, nome: bancoUsuarios[k].nome || k, obj: bancoUsuarios[k] }); } }
+    for(let k in bancoUsuarios) { 
+        if(bancoUsuarios[k].cargo === "promotor" && (bancoUsuarios[k].criadoPor === supervisorGerenciadoAtual || usuarioLogado.id === "master")) { 
+            promotoresArray.push({ login: k, nome: bancoUsuarios[k].nome || k, obj: bancoUsuarios[k] }); 
+        } 
+    }
     promotoresArray.sort((a, b) => a.nome.localeCompare(b.nome));
 
     let htmlPromotores = "";
     promotoresArray.forEach(p => {
         let u = p.obj; let k = p.login;
-        htmlPromotores += `<div class="item-modal-busca-promotor" style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 15px; margin-bottom: 10px; text-align: left;"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;"><strong style="font-size:15px;"><i data-lucide="user" class="lucide-sm"></i> ${u.nome || k} (@${k})</strong><div style="display:flex; gap:8px;"><button class="btn-editar" style="background:#f59e0b; color:#fff;" onclick="adminAbrirModalSenha('${k}')"><i data-lucide="key" class="lucide-sm"></i></button><button class="btn-editar" style="background:var(--primary); color:white;" onclick="adminAbrirModalNome('${k}')"><i data-lucide="edit-3" class="lucide-sm"></i></button><button class="btn-editar" style="background:#8b5cf6; color:white;" onclick="adminAbrirModalPermissoes('${k}')"><i data-lucide="shield" class="lucide-sm"></i></button><button class="btn-excluir" onclick="adminRemoverUsuarioModalEquipe('${k}')"><i data-lucide="trash-2" class="lucide-sm"></i></button></div></div><div style="font-size:13px; color:var(--cor-secundaria); display:flex; justify-content:space-between;"><span>Meta Padrão: <strong>${u.meta || 0}</strong> <button class="btn-editar-meta" onclick="adminAbrirModalMeta('${k}')"><i data-lucide="target" class="lucide-sm"></i></button></span><span>Lojas: <strong>${u.lojasPermitidas ? u.lojasPermitidas.length : 0}</strong> <button class="btn-editar" onclick="adminAbrirModalLojas('${k}')"><i data-lucide="store" class="lucide-sm"></i></button></span></div></div>`;
+        let qtdLojas = u.lojasPermitidas ? u.lojasPermitidas.length : 0;
+        
+        htmlPromotores += `
+        <div class="item-modal-busca-promotor" style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; padding: 16px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
+            <div style="text-align: left;">
+                <strong style="font-size:15px; display:block; color: var(--cor-texto);">${u.nome || k}</strong>
+                <span style="font-size:11px; color:var(--cor-secundaria);">@${k} • ${qtdLojas} Loja(s) vinculada(s)</span>
+            </div>
+            <button style="background: transparent; border: none; color: var(--cor-secundaria); padding: 10px; border-radius: 50%; cursor: pointer;" onclick="abrirMenuAcoesUsuario('${k}', '${u.nome || k}')">
+                <i data-lucide="more-vertical"></i>
+            </button>
+        </div>`;
     });
-    divPromotores.innerHTML = htmlPromotores || "<p style='font-size:13px; color:var(--cor-secundaria);'>Nenhum promotor cadastrado.</p>";
+    
+    let htmlListaVazia = "<p style='font-size:13px; color:var(--cor-secundaria);'>Nenhum promotor cadastrado.</p>";
+
+    let formPromotorHtml = `
+        <button class="btn-sistema" style="width: 100%; margin-bottom: 20px; background: rgba(16, 185, 129, 0.1); color: #10b981 !important; border: 1px dashed #10b981; box-shadow: none;" onclick="toggleFormNovoPromotor()">
+            <i data-lucide="user-plus"></i> + Cadastrar Promotor
+        </button>
+        
+        <div id="bloco-novo-promotor" style="display: none; background: var(--bg-item); padding: 20px; border-radius: 16px; border: 1px solid var(--border-color); margin-bottom: 20px;">
+            <strong style="font-size: 15px; color: #10b981; display: flex; align-items: center; margin-bottom: 15px;">Novo Perfil</strong>
+            <div class="input-admin-row" style="margin-bottom: 8px;"><input type="text" id="modal-promotor-login" placeholder="Login"><input type="text" id="modal-promotor-nome" placeholder="Nome Completo"></div>
+            <div class="input-admin-row" style="margin-bottom: 15px;"><input type="text" id="modal-promotor-senha" placeholder="Senha Padrão"></div>
+            
+            <div style="margin-bottom: 15px; background: var(--bg-container); padding: 15px; border-radius: 12px; border: 1px solid var(--border-color); text-align: left;">
+                <span style="font-size: 13px; font-weight: bold; color: #8b5cf6; display: flex; align-items: center; margin-bottom: 12px;"><i data-lucide="shield" class="lucide-sm"></i> Permissões Iniciais:</span>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 13px;">
+                    <label style="cursor: pointer;"><input type="checkbox" id="perm-vendas" checked> Lançar Vendas</label>
+                    <label style="cursor: pointer;"><input type="checkbox" id="perm-acomp" checked> Dashboard</label>
+                    <label style="cursor: pointer;"><input type="checkbox" id="perm-est-ver" checked> Ver Estoque</label>
+                    <label style="cursor: pointer;"><input type="checkbox" id="perm-est-edit" checked> Editar Estoque</label>
+                </div>
+            </div>
+            
+            <div style="margin-bottom: 15px; background: var(--bg-container); padding: 15px; border-radius: 12px; border: 1px solid var(--border-color);">
+                <span style="font-size: 13px; font-weight: bold; color: var(--cor-secundaria); display: block; margin-bottom: 10px;">Vincular as lojas:</span>
+                <div id="modal-promotor-lojas" style="display: grid; grid-template-columns: 1fr; gap: 10px; font-size: 13px; max-height: 150px; overflow-y: auto; text-align: left;"></div>
+            </div>
+            
+            <button id="btn-salvar-novo-promotor" class="btn-acao btn-enviar" style="width: 100%; padding:14px; border-radius:12px; font-size:15px; border:none;" onclick="adminAddPromotorEquipe()"><i data-lucide="check" style="margin-right:6px;"></i> Salvar Promotor</button>
+        </div>
+    `;
+
+    let containerAbaPromotores = document.getElementById('equipe-tab-promotores');
+    if (containerAbaPromotores) {
+        containerAbaPromotores.innerHTML = `
+            <input type="text" placeholder="🔍 Buscar promotor..." onkeyup="filtrarListaModal('item-modal-busca-promotor', this.value)" style="margin-bottom: 15px; width:100%; padding: 12px; border-radius: 12px; border: 1px solid var(--border-color); background: var(--bg-input); color: var(--cor-texto);">
+            ${formPromotorHtml}
+            <div id="lista-modal-promotores" style="max-height: 400px; overflow-y: auto;">${htmlPromotores || htmlListaVazia}</div>
+        `;
+    }
 
     let htmlLojas = ""; let htmlSelLoja = "";
     lojasDaRegiao.forEach(loja => {
@@ -1642,40 +1830,111 @@ function renderizarModalEquipe() {
         let vends = (objL.vendedores || []).map(v => `<span style="background:var(--bg-item); color:var(--primary); padding:4px 8px; border-radius:6px; font-size:11px; margin-right:6px; border:1px solid var(--primary); display:inline-flex; align-items:center; gap:4px; margin-bottom:4px;">${v} <i data-lucide="x" class="lucide-sm" style="cursor:pointer;" onclick="adminRemoverVendedor('${loja}', '${v}')"></i></span>`).join("");
         htmlLojas += `<div class="item-modal-busca-loja" style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 15px; margin-bottom: 10px; text-align: left;"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;"><strong style="font-size:15px;"><i data-lucide="store" class="lucide-sm"></i> ${loja}</strong><div style="display:flex; gap:8px;"><button class="btn-editar-meta" onclick="adminAbrirModalCapa('${loja}')"><i data-lucide="layers" class="lucide-sm"></i> Capa: ${objL.capa || 0}</button><button class="btn-excluir" onclick="adminRemoverLoja('${loja}')"><i data-lucide="trash-2" class="lucide-sm"></i></button></div></div><div style="font-size:13px; color:var(--cor-secundaria); margin-top:5px; line-height:1.6;">Vendedores: <br>${vends || 'Nenhum'}</div></div>`;
     });
-    divLojas.innerHTML = htmlLojas || "<p style='font-size:13px; color:var(--cor-secundaria);'>Nenhuma loja na região.</p>"; selLoja.innerHTML = htmlSelLoja;
+    if (divLojas) divLojas.innerHTML = htmlLojas || "<p style='font-size:13px; color:var(--cor-secundaria);'>Nenhuma loja na região.</p>"; 
+    if (selLoja) selLoja.innerHTML = htmlSelLoja;
     
     let divCheckboxLojas = document.getElementById('modal-promotor-lojas');
-    let htmlCheckLojas = lojasDaRegiao.map(l => `<label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" class="check-nova-loja" value="${l}"> ${l}</label>`).join("");
-    divCheckboxLojas.innerHTML = htmlCheckLojas || "<i style='font-size:11px;'>Crie lojas primeiro.</i>"; loadIcons();
+    if (divCheckboxLojas) {
+        let htmlCheckLojas = lojasDaRegiao.map(l => `<label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" class="check-nova-loja" value="${l}"> ${l}</label>`).join("");
+        divCheckboxLojas.innerHTML = htmlCheckLojas || "<i style='font-size:11px;'>Crie lojas primeiro.</i>"; 
+    }
+    
+    if (typeof lucide !== 'undefined') lucide.createIcons();
 }
-// ==========================================
-// app.js - PARTE 10 DE 10 (BLOCO 2 DE 3)
-// Adições e Exclusões Seguras (SUPABASE)
-// ==========================================
 
 async function adminAddPromotorEquipe() {
-    let login = document.getElementById('modal-promotor-login').value.trim().toLowerCase(); let nome = document.getElementById('modal-promotor-nome').value.trim(); let senha = document.getElementById('modal-promotor-senha').value.trim(); let meta = parseInt(document.getElementById('modal-promotor-meta').value) || 0;
-    if(!login || !nome || !senha) return mostrarToast("Preencha login, nome e senha obrigatórios", "alerta"); if(bancoUsuarios[login]) return mostrarToast("Este login já existe no sistema", "erro");
+    let login = document.getElementById('modal-promotor-login').value.trim().toLowerCase(); 
+    let nome = document.getElementById('modal-promotor-nome').value.trim(); 
+    let senha = document.getElementById('modal-promotor-senha').value.trim(); 
+    
+    if(!login || !nome || !senha) return mostrarToast("Preencha login, nome e senha obrigatórios", "alerta"); 
+    if(bancoUsuarios[login]) return mostrarToast("Este login já existe no sistema", "erro");
+    
     let lojasSelecionadas = Array.from(document.querySelectorAll('.check-nova-loja:checked')).map(cb => cb.value);
     
-    let btnSalvar = event.currentTarget; let textoOriginal = btnSalvar.innerHTML;
-    btnSalvar.innerHTML = '<i data-lucide="loader-2" class="lucide-sm" style="animation: spin 1s linear infinite;"></i> Criando...'; btnSalvar.disabled = true; loadIcons();
+    let btnSalvar = document.getElementById('btn-salvar-novo-promotor'); 
+    let textoOriginal = btnSalvar ? btnSalvar.innerHTML : "";
+    if (btnSalvar) {
+        btnSalvar.innerHTML = '<i data-lucide="loader-2" class="lucide-sm" style="animation: spin 1s linear infinite;"></i> Criando...'; 
+        btnSalvar.disabled = true; 
+    }
+    loadIcons();
+
+    let supPai = supervisorGerenciadoAtual || (usuarioLogado ? usuarioLogado.id : 'master');
+    let regiaoSuperior = (bancoUsuarios[supPai] && bancoUsuarios[supPai].regiao) ? bancoUsuarios[supPai].regiao : 'GLOBAL';
+
+    // CORREÇÃO: O campo 'meta' foi removido pois não existe na sua tabela.
+    // Lojas permitidas enviadas como array puro, pois a coluna é text[].
+    let payload = { 
+        login: login, 
+        nome: nome, 
+        senha: senha, 
+        cargo: "promotor", 
+        criado_por: supPai, 
+        lojas_permitidas: lojasSelecionadas, 
+        regiao: regiaoSuperior
+    };
 
     try {
-        const { error } = await supabaseClient.from('usuarios').insert([{ login: login, nome: nome, senha: senha, cargo: "promotor", meta: meta, criado_por: supervisorGerenciadoAtual, lojas_permitidas: lojasSelecionadas, regiao: bancoUsuarios[supervisorGerenciadoAtual] ? bancoUsuarios[supervisorGerenciadoAtual].regiao : null }]);
-        if (error) throw error;
-        bancoUsuarios[login] = { nome: nome, senha: senha, cargo: "promotor", meta: meta, criadoPor: supervisorGerenciadoAtual, lojasPermitidas: lojasSelecionadas, permissoes: { vendas: document.getElementById('perm-vendas').checked, acomp: document.getElementById('perm-acomp').checked, estoque_ver: document.getElementById('perm-est-ver').checked, estoque_editar: document.getElementById('perm-est-edit').checked } };
-        document.getElementById('modal-promotor-login').value = ""; document.getElementById('modal-promotor-nome').value = ""; document.getElementById('modal-promotor-senha').value = ""; document.getElementById('modal-promotor-meta').value = "";
-        renderizarModalEquipe(); mostrarToast("👤 Promotor criado no banco de dados!", "sucesso");
-    } catch (e) { console.error(e); mostrarToast("Erro ao criar usuário.", "erro"); } finally { btnSalvar.innerHTML = textoOriginal; btnSalvar.disabled = false; loadIcons(); }
+        const { data, error } = await supabaseClient.from('usuarios').insert([payload]).select();
+        
+        if (error) {
+            console.error("Erro detalhado do Supabase:", error);
+            if (error.code === '23505') {
+                mostrarToast("Login já cadastrado no banco!", "erro");
+            } else {
+                mostrarToast(`Erro: ${error.message}`, "erro");
+            }
+            return;
+        }
+        
+        bancoUsuarios[login] = { 
+            nome: nome, 
+            senha: senha, 
+            cargo: "promotor", 
+            meta: 0, 
+            metasPorLoja: {}, 
+            criadoPor: supPai, 
+            lojasPermitidas: lojasSelecionadas, 
+            permissoes: { 
+                vendas: document.getElementById('perm-vendas') ? document.getElementById('perm-vendas').checked : true, 
+                acomp: document.getElementById('perm-acomp') ? document.getElementById('perm-acomp').checked : true, 
+                estoque_ver: document.getElementById('perm-est-ver') ? document.getElementById('perm-est-ver').checked : true, 
+                estoque_editar: document.getElementById('perm-est-edit') ? document.getElementById('perm-est-edit').checked : true 
+            } 
+        };
+        
+        if (document.getElementById('modal-promotor-login')) document.getElementById('modal-promotor-login').value = ""; 
+        if (document.getElementById('modal-promotor-nome')) document.getElementById('modal-promotor-nome').value = ""; 
+        if (document.getElementById('modal-promotor-senha')) document.getElementById('modal-promotor-senha').value = ""; 
+        
+        renderizarModalEquipe(); 
+        mostrarToast("👤 Promotor criado no banco de dados!", "sucesso");
+        
+    } catch (e) { 
+        console.error("Erro na execução:", e); 
+        mostrarToast("Erro interno ao criar usuário.", "erro"); 
+    } finally { 
+        if (btnSalvar) {
+            btnSalvar.innerHTML = textoOriginal; 
+            btnSalvar.disabled = false; 
+        }
+        loadIcons(); 
+    }
 }
 
 async function adminAddGestorSup() {
-    let login = document.getElementById('admin-gs-login').value.trim().toLowerCase(); let nome = document.getElementById('admin-gs-nome').value.trim(); let senha = document.getElementById('admin-gs-senha').value.trim(); let cargo = document.getElementById('admin-gs-cargo').value;
-    let regiaoSel = document.getElementById('admin-gs-regiao-select') ? document.getElementById('admin-gs-regiao-select').value : ''; let regiaoNova = document.getElementById('admin-gs-regiao-input') ? document.getElementById('admin-gs-regiao-input').value.trim().toUpperCase() : ''; let regiaoFinal = regiaoSel === 'NOVA' ? regiaoNova : regiaoSel;
+    let login = document.getElementById('admin-gs-login').value.trim().toLowerCase(); 
+    let nome = document.getElementById('admin-gs-nome').value.trim(); 
+    let senha = document.getElementById('admin-gs-senha').value.trim(); 
+    let cargo = document.getElementById('admin-gs-cargo').value;
+    let regiaoSel = document.getElementById('admin-gs-regiao-select') ? document.getElementById('admin-gs-regiao-select').value : ''; 
+    let regiaoNova = document.getElementById('admin-gs-regiao-input') ? document.getElementById('admin-gs-regiao-input').value.trim().toUpperCase() : ''; 
+    let regiaoFinal = regiaoSel === 'NOVA' ? regiaoNova : regiaoSel;
     let vinculo = document.getElementById('admin-gs-vinculo-select') ? document.getElementById('admin-gs-vinculo-select').value : usuarioLogado.id;
     
-    if(!login || !nome || !senha) return mostrarToast("Preencha login, nome e senha!", "alerta"); if(bancoUsuarios[login]) return mostrarToast("Este login já existe!", "erro");
+    if(!login || !nome || !senha) return mostrarToast("Preencha login, nome e senha!", "alerta"); 
+    if(bancoUsuarios[login]) return mostrarToast("Este login já existe!", "erro");
     
     let pai = usuarioLogado.id; let regiaoBanco = null;
     if (cargo === 'gestor') { regiaoBanco = 'GLOBAL'; pai = usuarioLogado.id; } 
@@ -1683,16 +1942,39 @@ async function adminAddGestorSup() {
     else if (cargo === 'supervisor') { pai = vinculo; regiaoBanco = bancoUsuarios[pai] ? bancoUsuarios[pai].regiao : 'GLOBAL'; }
 
     let btnSalvar = event.currentTarget; let txtOriginal = btnSalvar.innerHTML;
-    btnSalvar.innerHTML = '<i data-lucide="loader-2" class="lucide-sm" style="animation: spin 1s linear infinite;"></i> Criando...'; btnSalvar.disabled = true; loadIcons();
+    btnSalvar.innerHTML = '<i data-lucide="loader-2" class="lucide-sm" style="animation: spin 1s linear infinite;"></i> Criando...'; 
+    btnSalvar.disabled = true; loadIcons();
 
     try {
-        const { error } = await supabaseClient.from('usuarios').insert([{ login: login, nome: nome, senha: senha, cargo: cargo, meta: 0, criado_por: pai, lojas_permitidas: [], regiao: regiaoBanco }]);
+        // CORREÇÃO: Removido o campo "meta" para respeitar a estrutura do banco
+        const payload = { 
+            login: login, 
+            nome: nome, 
+            senha: senha, 
+            cargo: cargo, 
+            criado_por: pai, 
+            lojas_permitidas: [], 
+            regiao: regiaoBanco 
+        };
+
+        const { error } = await supabaseClient.from('usuarios').insert([payload]);
         if (error) throw error;
+        
         bancoUsuarios[login] = { nome: nome, senha: senha, cargo: cargo, regiao: regiaoBanco, criadoPor: pai, meta: 0, lojasPermitidas: [] };
+        
         document.getElementById('admin-gs-login').value = ""; document.getElementById('admin-gs-nome').value = ""; document.getElementById('admin-gs-senha').value = ""; if(document.getElementById('admin-gs-regiao-input')) document.getElementById('admin-gs-regiao-input').value = "";
         if (cargo === 'regional' && typeof renderizarSelectVinculo === "function") { renderizarSelectVinculo(); renderizarSelectRegioes(); }
-        renderizarAdminUsuarios(); mostrarToast(cargo.toUpperCase() + " criado com sucesso no banco!", "sucesso");
-    } catch(e) { console.error(e); mostrarToast("Erro ao criar perfil no banco.", "erro"); } finally { btnSalvar.innerHTML = txtOriginal; btnSalvar.disabled = false; loadIcons(); }
+        
+        renderizarAdminUsuarios(); 
+        mostrarToast(cargo.toUpperCase() + " criado com sucesso no banco!", "sucesso");
+    } catch(e) { 
+        console.error(e); 
+        mostrarToast(`Erro ao criar perfil: ${e.message || 'Erro desconhecido'}`, "erro"); 
+    } finally { 
+        btnSalvar.innerHTML = txtOriginal; 
+        btnSalvar.disabled = false; 
+        loadIcons(); 
+    }
 }
 
 async function adminAddLojaEquipe() { 
@@ -1721,13 +2003,12 @@ function adminRemoverUsuario(login) { solicitarSenhaSeguranca(async () => { most
 function adminRemoverLoja(loja) { solicitarSenhaSeguranca(async () => { mostrarToast("Excluindo loja da nuvem...", "info"); try { const { error } = await supabaseClient.from('lojas_config').delete().eq('nome_loja', loja); if (error) throw error; delete lojasConfig[loja]; for (let k in bancoUsuarios) { if (bancoUsuarios[k].lojasPermitidas) { bancoUsuarios[k].lojasPermitidas = bancoUsuarios[k].lojasPermitidas.filter(l => l !== loja); } } renderizarModalEquipe(); mostrarToast("Loja removida permanentemente.", "sucesso"); } catch (e) { console.error(e); mostrarToast("Erro ao excluir no banco.", "erro"); } }); }
 function adminRemoverVendedor(loja, vend) { solicitarSenhaSeguranca(async () => { let novosVendedores = lojasConfig[loja].vendedores.filter(v => v !== vend); mostrarToast("Removendo vendedor na nuvem...", "info"); try { const { error } = await supabaseClient.from('lojas_config').update({ vendedores: novosVendedores }).eq('nome_loja', loja); if (error) throw error; lojasConfig[loja].vendedores = novosVendedores; renderizarModalEquipe(); mostrarToast("Vendedor removido com sucesso!", "sucesso"); } catch (e) { console.error(e); mostrarToast("Erro ao remover no banco.", "erro"); } }); }
 
+// ==========================================
+// CADASTRO DE APARELHOS E GRUPOS (AUTO-SAVE)
+// ==========================================
 function renderizarAdminAparelhos() { let div = document.getElementById('lista-admin-aparelhos'); let html = ""; for(let ap in mapaEmojis) { html += `<div style="display:flex; justify-content:space-between; align-items:center; padding:12px; border-bottom:1px solid var(--border-color); font-size:15px; color:var(--cor-texto);"><span><span style="font-size: 20px; margin-right: 8px;">${mapaEmojis[ap]}</span> ${ap.toUpperCase()}</span><button class="btn-excluir" onclick="removerAparelhoGlobal('${ap}')"><i data-lucide="trash-2" class="lucide-sm"></i> Excluir</button></div>`; } div.innerHTML = html || "<p style='color:var(--cor-secundaria); font-size:13px;'>Nenhum aparelho cadastrado.</p>"; loadIcons(); }
-function removerAparelhoGlobal(ap) { delete mapaEmojis[ap]; renderizarAdminAparelhos(); mostrarToast("Aparelho excluído. Clique em 'Salvar'.", "info"); }
-function adminAddAparelho() { let n = document.getElementById('admin-aparelho-nome').value.trim().toLowerCase(); let e = document.getElementById('admin-aparelho-emoji').value.trim(); if(!n || !e) return mostrarToast("Preencha Nome e Emoji", "alerta"); if(mapaEmojis[n]) return mostrarToast("Aparelho já existe", "erro"); mapaEmojis[n] = e; document.getElementById('admin-aparelho-nome').value = ""; document.getElementById('admin-aparelho-emoji').value = ""; renderizarAdminAparelhos(); mostrarToast("Aparelho adicionado. Clique em 'Salvar'.", "info"); }
-// ==========================================
-// app.js - PARTE 10 DE 10 (BLOCO 3 DE 3)
-// Comissões, Gamificação, Market Share e Relatórios
-// ==========================================
+function removerAparelhoGlobal(ap) { delete mapaEmojis[ap]; renderizarAdminAparelhos(); salvarConfiguracoesGlobais(true); }
+function adminAddAparelho() { let n = document.getElementById('admin-aparelho-nome').value.trim().toLowerCase(); let e = document.getElementById('admin-aparelho-emoji').value.trim(); if(!n || !e) return mostrarToast("Preencha Nome e Emoji", "alerta"); if(mapaEmojis[n]) return mostrarToast("Aparelho já existe", "erro"); mapaEmojis[n] = e; document.getElementById('admin-aparelho-nome').value = ""; document.getElementById('admin-aparelho-emoji').value = ""; renderizarAdminAparelhos(); salvarConfiguracoesGlobais(true); }
 
 function renderizarInputsFoco() {
     const container = document.getElementById('admin-foco-container'); const selSup = document.getElementById('seletor-foco-sup'); 
@@ -1776,6 +2057,7 @@ function atualizarListaPremiumGlobal() {
     let campanhas = []; document.querySelectorAll('.linha-campanha-dinamica').forEach(bloco => { campanhas.push({ aparelho: bloco.querySelector('.camp-aparelho').value, promotorAlvo: bloco.querySelector('.camp-promotor').value, qtdMinima: Number(bloco.querySelector('.camp-qtd').value), bonus: Number(bloco.querySelector('.camp-valor').value) }); }); valoresComissao[selSup].campanhasPersonalizadas = campanhas;
     if(!valoresComissao[selSup].aparelhos) valoresComissao[selSup].aparelhos = {}; let cfgAp = valoresComissao[selSup].aparelhos;
     document.querySelectorAll('.ap-tipo-regra').forEach(sel => { let ap = sel.getAttribute('data-ap'); let val = sel.value; if (!cfgAp[ap]) cfgAp[ap] = {}; if (val === 'nenhum') { cfgAp[ap] = { tipo: 'nenhum' }; } else if (val === 'fixo') { let inputFixo = document.querySelector(`.ap-valor-fixo[data-ap="${ap}"]`); cfgAp[ap] = { tipo: 'fixo', valorFixo: inputFixo ? Number(inputFixo.value) : 0 }; } else if (val.startsWith('grupo_')) { let gId = val.replace('grupo_', ''); cfgAp[ap] = { tipo: 'grupo', grupoId: gId, valores: {} }; document.querySelectorAll(`.ap-valor-grupo-nivel[data-ap="${ap}"]`).forEach(inp => { let nIdx = inp.getAttribute('data-nidx'); cfgAp[ap].valores[nIdx] = Number(inp.value); }); } });
+    salvarConfiguracoesGlobais(false); 
 }
 
 function adminAddGrupo() { let selSup = document.getElementById('seletor-foco-sup').value; if (!valoresComissao[selSup]) valoresComissao[selSup] = {}; if (!valoresComissao[selSup].grupos) valoresComissao[selSup].grupos = []; valoresComissao[selSup].grupos.push({ id: 'g' + Date.now(), nome: 'Nova Categoria', niveis: [{ meta: 1 }] }); renderizarInputsFoco(); atualizarListaPremiumGlobal(); }
@@ -1785,29 +2067,37 @@ function adminRemoverNivelGrupo(gId, nIdx) { let selSup = document.getElementByI
 function adminEditGrupoNome(gId, val) { let selSup = document.getElementById('seletor-foco-sup').value; let g = valoresComissao[selSup].grupos.find(x => x.id === gId); if (g) { g.nome = val; atualizarListaPremiumGlobal(); } }
 function adminEditGrupoNivel(gId, nIdx, field, val) { let selSup = document.getElementById('seletor-foco-sup').value; let g = valoresComissao[selSup].grupos.find(x => x.id === gId); if (g && g.niveis[nIdx]) { g.niveis[nIdx][field] = Number(val); atualizarListaPremiumGlobal(); } }
 function adminMudarTipoComissaoAp(ap, val) { atualizarListaPremiumGlobal(); renderizarInputsFoco(); }
-function adicionarLinhaCampanha() { let selSup = document.getElementById('seletor-foco-sup').value; if (!valoresComissao[selSup]) valoresComissao[selSup] = {}; if (!valoresComissao[selSup].campanhasPersonalizadas) valoresComissao[selSup].campanhasPersonalizadas = []; valoresComissao[selSup].campanhasPersonalizadas.push({ aparelho: 'todos', promotorAlvo: 'todos', qtdMinima: 1, bonus: 50 }); renderizarInputsFoco(); }
+function adicionarLinhaCampanha() { let selSup = document.getElementById('seletor-foco-sup').value; if (!valoresComissao[selSup]) valoresComissao[selSup] = {}; if (!valoresComissao[selSup].campanhasPersonalizadas) valoresComissao[selSup].campanhasPersonalizadas = []; valoresComissao[selSup].campanhasPersonalizadas.push({ aparelho: 'todos', promotorAlvo: 'todos', qtdMinima: 1, bonus: 50 }); renderizarInputsFoco(); atualizarListaPremiumGlobal(); }
 function removerLinhaCampanha(index) { let selSup = document.getElementById('seletor-foco-sup').value; if (valoresComissao[selSup] && valoresComissao[selSup].campanhasPersonalizadas) { valoresComissao[selSup].campanhasPersonalizadas.splice(index, 1); renderizarInputsFoco(); atualizarListaPremiumGlobal(); } }
+
 function fecharModalEdicao() { document.getElementById('modal-edicao').classList.remove('ativo'); }
 
-window.opcoesInteligentesMeta = function() { let options = `<option value="" disabled selected>+ Clique para adicionar modelo...</option><optgroup label="Famílias (Agrupados)"><option value="RENO">📱 Toda a Linha RENO</option><option value=" A">📱 Toda a Linha A</option></optgroup><optgroup label="Aparelhos Específicos">`; for (let ap in mapaEmojis) { options += `<option value="${ap.toUpperCase()}">${mapaEmojis[ap]} ${ap.toUpperCase()}</option>`; } options += `</optgroup>`; return options; };
+// ==========================================
+// MODAIS DE EDIÇÃO DE DADOS (ATUALIZAM O DB IMEDIATAMENTE)
+// ==========================================
 
 function adminAbrirModalMeta(login) { 
-    document.getElementById('modal-edicao-titulo').innerHTML = `<i data-lucide="target"></i> Metas (@${login})`; 
-    let metaGeral = bancoUsuarios[login].meta || 0; let metaPremAbs = bancoUsuarios[login].metaPremiumAbs !== undefined ? bancoUsuarios[login].metaPremiumAbs : ''; let metasLinhas = bancoUsuarios[login].metasLinhas || []; let linhasHtml = '';
-    metasLinhas.forEach((m) => { linhasHtml += `<div class="linha-meta-especifica" style="display:flex; gap:8px; margin-bottom:12px; align-items:flex-start;"><div style="flex:2; display:flex; flex-direction:column; gap:4px;"><div style="display:flex; border: 1px solid var(--border-color); border-radius: 8px; overflow:hidden; background:var(--bg-input);"><input type="text" class="input-linha-nome" value="${m.linha}" readonly placeholder="Modelos agrupados..." style="border:none; padding:10px; width:100%; font-size:11px; font-weight:bold; color:var(--primary); background:transparent; margin:0;"><button class="btn-excluir" onclick="this.previousElementSibling.value=''" style="padding:10px; border-radius:0; background:transparent;"><i data-lucide="x" style="margin:0; color:#ef4444; width:14px;"></i></button></div><select onchange="if(this.value){ let inp = this.previousElementSibling.querySelector('.input-linha-nome'); inp.value = inp.value ? inp.value + ', ' + this.value : this.value; this.selectedIndex = 0; }" style="margin:0; padding:8px; border-radius:8px; border-color:var(--primary); font-size:11px; background: var(--bg-item); color: var(--cor-texto);">${window.opcoesInteligentesMeta()}</select></div><input type="number" class="input-linha-qtd" value="${m.qtd}" placeholder="Qtd" style="flex:0.6; margin:0; padding:10px; border-radius:8px; height: 36px; text-align:center;"><button class="btn-excluir" onclick="this.parentElement.remove()" style="padding:10px; border-radius:8px; height: 36px;"><i data-lucide="trash-2" style="margin:0;"></i></button></div>`; });
-    document.getElementById('modal-edicao-corpo').innerHTML = `<div style="background: var(--bg-item); padding: 15px; border-radius: 12px; margin-bottom: 15px; border: 1px solid var(--border-color);"><label style="font-size: 13px; font-weight: bold; color: var(--cor-texto); display: flex; align-items: center; gap:6px; margin-bottom: 8px;"><i data-lucide="shopping-bag" class="lucide-sm" style="color:var(--primary);"></i> Meta Global da Loja (Volume):</label><input type="number" id="input-edit-meta" value="${metaGeral}" placeholder="Ex: 50" style="margin-bottom: 0; font-size: 16px; font-weight: bold;"></div><div style="background: rgba(16, 185, 129, 0.05); padding: 15px; border-radius: 12px; margin-bottom: 15px; border: 1px dashed #10b981;"><label style="font-size: 13px; font-weight: bold; color: #10b981; display: flex; align-items: center; gap:6px; margin-bottom: 8px;"><i data-lucide="star" class="lucide-sm"></i> Meta Foco/Premium Específica:</label><input type="number" id="input-edit-prem-abs" value="${metaPremAbs}" placeholder="Vazio = Usa a % da Equipe" style="margin-bottom: 0; border-color: #10b981; font-weight: bold;"></div><div style="border-top: 1px dashed var(--border-color); padding-top: 15px; margin-top: 15px;"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;"><label style="font-size: 13px; font-weight: bold; color: var(--primary); margin:0; display: flex; align-items: center; gap:6px;"><i data-lucide="smartphone" class="lucide-sm"></i> Bolsões de Meta (Mix):</label><button class="btn-editar" onclick="adicionarInputLinhaMeta()" style="padding:6px 10px; font-size:11px; background:var(--primary); color:white;"><i data-lucide="plus" class="lucide-sm"></i> Linha</button></div><div id="container-metas-linhas">${linhasHtml}</div></div>`; 
+    let u = bancoUsuarios[login];
+    document.getElementById('modal-edicao-titulo').innerHTML = `<i data-lucide="target"></i> Metas por Loja (@${login})`; 
+    let lojasVinculadas = u.lojasPermitidas || []; let metasLoja = u.metasPorLoja || {}; 
+    let html = `<div style="font-size: 13px; color: var(--cor-secundaria); margin-bottom: 15px;">Defina a meta para cada loja que este promotor atende:</div>`;
+    lojasVinculadas.forEach(loja => { let metaAtual = metasLoja[loja] || 0; html += `<div style="margin-bottom: 12px; background: var(--bg-item); padding: 10px; border-radius: 8px;"><label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;">${loja}:</label><input type="number" class="input-meta-loja" data-loja="${loja}" value="${metaAtual}" style="width:100%; padding:8px;"></div>`; });
+    if(lojasVinculadas.length === 0) { html = "<p style='color:var(--cor-secundaria); font-size:13px;'>Este promotor não tem lojas vinculadas.</p>"; }
+    document.getElementById('modal-edicao-corpo').innerHTML = html;
+    
     let btn = document.getElementById('btn-salvar-edicao'); 
-    btn.onclick = function() { let valMeta = parseInt(document.getElementById('input-edit-meta').value) || 0; let valPremAbs = document.getElementById('input-edit-prem-abs').value.trim(); let arrayLinhas = []; document.querySelectorAll('.linha-meta-especifica').forEach(el => { let nomeLinha = el.querySelector('.input-linha-nome').value.trim().toUpperCase(); let qtdLinha = parseInt(el.querySelector('.input-linha-qtd').value) || 0; if (nomeLinha && qtdLinha > 0) { arrayLinhas.push({ linha: nomeLinha, qtd: qtdLinha }); } }); bancoUsuarios[login].meta = valMeta; bancoUsuarios[login].metasLinhas = arrayLinhas; if (valPremAbs !== "") { bancoUsuarios[login].metaPremiumAbs = parseInt(valPremAbs); } else { delete bancoUsuarios[login].metaPremiumAbs; } mostrarToast("Metas Inteligentes atualizadas!", "sucesso"); fecharModalEdicao(); if (document.getElementById('modal-gerenciar-equipe').classList.contains('ativa')) renderizarModalEquipe(); }; 
-    document.getElementById('modal-edicao').classList.add('ativo'); loadIcons(); 
+    btn.onclick = async function() { 
+        let novasMetas = {}; document.querySelectorAll('.input-meta-loja').forEach(el => { novasMetas[el.getAttribute('data-loja')] = parseInt(el.value) || 0; });
+        bancoUsuarios[login].metasPorLoja = novasMetas;
+        try { await supabaseClient.from('usuarios').update({ metas_por_loja: novasMetas }).eq('login', login); mostrarToast("Metas por loja salvas na nuvem!", "sucesso"); fecharModalEdicao(); if (document.getElementById('modal-gerenciar-equipe').classList.contains('ativa')) renderizarModalEquipe(); } catch(e) { console.error(e); mostrarToast("Erro ao salvar meta.", "erro"); }
+    }; document.getElementById('modal-edicao').classList.add('ativo'); 
 }
 
-window.adicionarInputLinhaMeta = function() { let container = document.getElementById('container-metas-linhas'); let div = document.createElement('div'); div.className = 'linha-meta-especifica'; div.style.cssText = 'display:flex; gap:8px; margin-bottom:12px; align-items:flex-start; animation: fadeIn 0.3s;'; div.innerHTML = `<div style="flex:2; display:flex; flex-direction:column; gap:4px;"><div style="display:flex; border: 1px solid var(--border-color); border-radius: 8px; overflow:hidden; background:var(--bg-input);"><input type="text" class="input-linha-nome" readonly placeholder="Adicione modelos abaixo 👇" style="border:none; padding:10px; width:100%; font-size:11px; font-weight:bold; color:var(--primary); background:transparent; margin:0;"><button class="btn-excluir" onclick="this.previousElementSibling.value=''" style="padding:10px; border-radius:0; background:transparent;"><i data-lucide="x" style="margin:0; color:#ef4444; width:14px;"></i></button></div><select onchange="if(this.value){ let inp = this.previousElementSibling.querySelector('.input-linha-nome'); inp.value = inp.value ? inp.value + ', ' + this.value : this.value; this.selectedIndex = 0; }" style="margin:0; padding:8px; border-radius:8px; border-color:var(--primary); font-size:11px; background: var(--bg-item); color: var(--cor-texto);">${window.opcoesInteligentesMeta()}</select></div><input type="number" class="input-linha-qtd" placeholder="Qtd" style="flex:0.6; margin:0; padding:10px; border-radius:8px; height: 36px; text-align:center;"><button class="btn-excluir" onclick="this.parentElement.remove()" style="padding:10px; border-radius:8px; height: 36px;"><i data-lucide="trash-2" style="margin:0;"></i></button>`; container.appendChild(div); loadIcons(); }
-
-function adminAbrirModalSenha(login) { document.getElementById('modal-edicao-titulo').innerHTML = `<i data-lucide="key"></i> Senha (@${login})`; document.getElementById('modal-edicao-corpo').innerHTML = `<input type="text" id="input-edit-senha" value="${bancoUsuarios[login].senha}" placeholder="Nova Senha">`; let btn = document.getElementById('btn-salvar-edicao'); btn.onclick = function() { let val = document.getElementById('input-edit-senha').value.trim(); if(val) { bancoUsuarios[login].senha = val; mostrarToast("Senha alterada!", "sucesso"); fecharModalEdicao(); renderizarAdminUsuarios(); if (document.getElementById('modal-gerenciar-equipe').classList.contains('ativa')) renderizarModalEquipe(); } }; document.getElementById('modal-edicao').classList.add('ativo'); loadIcons(); }
-function adminAbrirModalNome(login) { document.getElementById('modal-edicao-titulo').innerHTML = `<i data-lucide="edit-3"></i> Nome (@${login})`; document.getElementById('modal-edicao-corpo').innerHTML = `<input type="text" id="input-edit-nome" value="${bancoUsuarios[login].nome || login}" placeholder="Nome Completo">`; let btn = document.getElementById('btn-salvar-edicao'); btn.onclick = function() { let val = document.getElementById('input-edit-nome').value.trim(); if(val) { bancoUsuarios[login].nome = val; mostrarToast("Nome alterada!", "sucesso"); fecharModalEdicao(); renderizarAdminUsuarios(); if (document.getElementById('modal-gerenciar-equipe').classList.contains('ativa')) renderizarModalEquipe(); } }; document.getElementById('modal-edicao').classList.add('ativo'); loadIcons(); }
-function adminAbrirModalRegiao(login) { document.getElementById('modal-edicao-titulo').innerHTML = `<i data-lucide="globe"></i> Região (@${login})`; document.getElementById('modal-edicao-corpo').innerHTML = `<input type="text" id="input-edit-regiao" value="${bancoUsuarios[login].regiao || ''}" placeholder="Nome da Região">`; let btn = document.getElementById('btn-salvar-edicao'); btn.onclick = function() { let val = document.getElementById('input-edit-regiao').value.trim().toUpperCase(); if(val) { bancoUsuarios[login].regiao = val; mostrarToast("Região alterada!", "sucesso"); fecharModalEdicao(); renderizarAdminUsuarios(); } }; document.getElementById('modal-edicao').classList.add('ativo'); loadIcons(); }
-function adminAbrirModalCapa(loja) { document.getElementById('modal-edicao-titulo').innerHTML = `<i data-lucide="layers"></i> Capa (${loja})`; document.getElementById('modal-edicao-corpo').innerHTML = `<input type="number" id="input-edit-capa" value="${lojasConfig[loja].capa || 0}" placeholder="Capa da Loja">`; let btn = document.getElementById('btn-salvar-edicao'); btn.onclick = function() { let val = parseInt(document.getElementById('input-edit-capa').value) || 0; lojasConfig[loja].capa = val; mostrarToast("Capa alterada!", "sucesso"); fecharModalEdicao(); if (document.getElementById('modal-gerenciar-equipe').classList.contains('ativa')) renderizarModalEquipe(); }; document.getElementById('modal-edicao').classList.add('ativo'); loadIcons(); }
-function adminAbrirModalPermissoes(login) { let p = bancoUsuarios[login].permissoes || { vendas: true, acomp: true, estoque_ver: true, estoque_editar: true }; document.getElementById('modal-edicao-titulo').innerHTML = `<i data-lucide="shield"></i> Permissões (@${login})`; let html = `<div style="display:flex; flex-direction:column; gap:10px; font-size: 14px; color: var(--cor-texto);"><label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="edit-p-vendas" ${p.vendas ? 'checked':''}> Lançar Vendas</label><label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="edit-p-acomp" ${p.acomp ? 'checked':''}> Acompanhamento</label><label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="edit-p-est-ver" ${p.estoque_ver ? 'checked':''}> Ver Estoque</label><label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="edit-p-est-edit" ${p.estoque_editar ? 'checked':''}> Editar Estoque</label></div>`; document.getElementById('modal-edicao-corpo').innerHTML = html; let btn = document.getElementById('btn-salvar-edicao'); btn.onclick = function() { bancoUsuarios[login].permissoes = { vendas: document.getElementById('edit-p-vendas').checked, acomp: document.getElementById('edit-p-acomp').checked, estoque_ver: document.getElementById('edit-p-est-ver').checked, estoque_editar: document.getElementById('edit-p-est-edit').checked }; mostrarToast("Permissões atualizadas!", "sucesso"); fecharModalEdicao(); }; document.getElementById('modal-edicao').classList.add('ativo'); loadIcons(); }
+function adminAbrirModalSenha(login) { document.getElementById('modal-edicao-titulo').innerHTML = `<i data-lucide="key"></i> Senha (@${login})`; document.getElementById('modal-edicao-corpo').innerHTML = `<input type="text" id="input-edit-senha" value="${bancoUsuarios[login].senha}" placeholder="Nova Senha">`; let btn = document.getElementById('btn-salvar-edicao'); btn.onclick = async function() { let val = document.getElementById('input-edit-senha').value.trim(); if(val) { try { await supabaseClient.from('usuarios').update({ senha: val }).eq('login', login); bancoUsuarios[login].senha = val; mostrarToast("Senha alterada na nuvem!", "sucesso"); fecharModalEdicao(); renderizarAdminUsuarios(); if (document.getElementById('modal-gerenciar-equipe').classList.contains('ativa')) renderizarModalEquipe(); } catch(e) { mostrarToast("Erro ao alterar senha.", "erro"); } } }; document.getElementById('modal-edicao').classList.add('ativo'); loadIcons(); }
+function adminAbrirModalNome(login) { document.getElementById('modal-edicao-titulo').innerHTML = `<i data-lucide="edit-3"></i> Nome (@${login})`; document.getElementById('modal-edicao-corpo').innerHTML = `<input type="text" id="input-edit-nome" value="${bancoUsuarios[login].nome || login}" placeholder="Nome Completo">`; let btn = document.getElementById('btn-salvar-edicao'); btn.onclick = async function() { let val = document.getElementById('input-edit-nome').value.trim(); if(val) { try { await supabaseClient.from('usuarios').update({ nome: val }).eq('login', login); bancoUsuarios[login].nome = val; mostrarToast("Nome alterado na nuvem!", "sucesso"); fecharModalEdicao(); renderizarAdminUsuarios(); if (document.getElementById('modal-gerenciar-equipe').classList.contains('ativa')) renderizarModalEquipe(); } catch(e) { mostrarToast("Erro ao alterar nome.", "erro"); } } }; document.getElementById('modal-edicao').classList.add('ativo'); loadIcons(); }
+function adminAbrirModalRegiao(login) { document.getElementById('modal-edicao-titulo').innerHTML = `<i data-lucide="globe"></i> Região (@${login})`; document.getElementById('modal-edicao-corpo').innerHTML = `<input type="text" id="input-edit-regiao" value="${bancoUsuarios[login].regiao || ''}" placeholder="Nome da Região">`; let btn = document.getElementById('btn-salvar-edicao'); btn.onclick = async function() { let val = document.getElementById('input-edit-regiao').value.trim().toUpperCase(); if(val) { try { await supabaseClient.from('usuarios').update({ regiao: val }).eq('login', login); bancoUsuarios[login].regiao = val; mostrarToast("Região alterada na nuvem!", "sucesso"); fecharModalEdicao(); renderizarAdminUsuarios(); } catch(e) { mostrarToast("Erro ao alterar.", "erro"); } } }; document.getElementById('modal-edicao').classList.add('ativo'); loadIcons(); }
+function adminAbrirModalCapa(loja) { document.getElementById('modal-edicao-titulo').innerHTML = `<i data-lucide="layers"></i> Capa (${loja})`; document.getElementById('modal-edicao-corpo').innerHTML = `<input type="number" id="input-edit-capa" value="${lojasConfig[loja].capa || 0}" placeholder="Capa da Loja">`; let btn = document.getElementById('btn-salvar-edicao'); btn.onclick = async function() { let val = parseInt(document.getElementById('input-edit-capa').value) || 0; try { await supabaseClient.from('lojas_config').update({ capa: val }).eq('nome_loja', loja); lojasConfig[loja].capa = val; mostrarToast("Capa alterada na nuvem!", "sucesso"); fecharModalEdicao(); if (document.getElementById('modal-gerenciar-equipe').classList.contains('ativa')) renderizarModalEquipe(); } catch(e) { mostrarToast("Erro ao alterar.", "erro"); } }; document.getElementById('modal-edicao').classList.add('ativo'); loadIcons(); }
+function adminAbrirModalPermissoes(login) { let p = bancoUsuarios[login].permissoes || { vendas: true, acomp: true, estoque_ver: true, estoque_editar: true }; document.getElementById('modal-edicao-titulo').innerHTML = `<i data-lucide="shield"></i> Permissões (@${login})`; let html = `<div style="display:flex; flex-direction:column; gap:10px; font-size: 14px; color: var(--cor-texto);"><label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="edit-p-vendas" ${p.vendas ? 'checked':''}> Lançar Vendas</label><label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="edit-p-acomp" ${p.acomp ? 'checked':''}> Acompanhamento</label><label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="edit-p-est-ver" ${p.estoque_ver ? 'checked':''}> Ver Estoque</label><label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="edit-p-est-edit" ${p.estoque_editar ? 'checked':''}> Editar Estoque</label></div>`; document.getElementById('modal-edicao-corpo').innerHTML = html; let btn = document.getElementById('btn-salvar-edicao'); btn.onclick = async function() { bancoUsuarios[login].permissoes = { vendas: document.getElementById('edit-p-vendas').checked, acomp: document.getElementById('edit-p-acomp').checked, estoque_ver: document.getElementById('edit-p-est-ver').checked, estoque_editar: document.getElementById('edit-p-est-edit').checked }; mostrarToast("Permissões atualizadas!", "sucesso"); fecharModalEdicao(); }; document.getElementById('modal-edicao').classList.add('ativo'); loadIcons(); }
 
 function adminAbrirModalLojas(login) { 
     document.getElementById('modal-edicao-titulo').innerHTML = `<i data-lucide="store"></i> Lojas (@${login})`; 
@@ -1815,21 +2105,31 @@ function adminAbrirModalLojas(login) {
     if (usuarioLogado.id === "master" || usuarioLogado.cargo === "gestor") { supLojas = Object.keys(lojasConfig); } 
     let html = '<div style="display:flex; flex-direction:column; gap:8px; max-height:200px; overflow-y:auto; text-align:left; color: var(--cor-texto); font-size:14px;">'; supLojas.forEach(l => { let checked = permitidas.includes(l) ? 'checked' : ''; html += `<label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" class="edit-loja-check" value="${l}" ${checked}> ${l}</label>`; }); html += '</div>'; 
     if(supLojas.length === 0) html = "<p style='font-size:13px; color:var(--cor-secundaria);'>Nenhuma loja disponível.</p>"; document.getElementById('modal-edicao-corpo').innerHTML = html; 
+    
     let btn = document.getElementById('btn-salvar-edicao'); 
-    btn.onclick = async function() { let selecionadas = Array.from(document.querySelectorAll('.edit-loja-check:checked')).map(cb => cb.value); mostrarToast("Atualizando lojas...", "info"); try { const { error } = await supabaseClient.from('usuarios').update({ lojas_permitidas: selecionadas }).eq('login', login); if (error) throw error; bancoUsuarios[login].lojasPermitidas = selecionadas; mostrarToast("Lojas vinculadas na nuvem!", "sucesso"); fecharModalEdicao(); if (document.getElementById('modal-gerenciar-equipe').classList.contains('ativa')) renderizarModalEquipe(); } catch(e) { console.error(e); mostrarToast("Erro ao vincular lojas.", "erro"); } }; document.getElementById('modal-edicao').classList.add('ativo'); loadIcons(); 
+    
+    btn.onclick = async function() { 
+        let selecionadas = Array.from(document.querySelectorAll('.edit-loja-check:checked')).map(cb => cb.value); 
+        mostrarToast("Atualizando lojas...", "info"); 
+        try { 
+            // CORREÇÃO: "selecionadas" é enviado diretamente (sem conversão) porque a coluna é text[]
+            const { error } = await supabaseClient.from('usuarios').update({ lojas_permitidas: selecionadas }).eq('login', login); 
+            if (error) throw error; 
+            
+            bancoUsuarios[login].lojasPermitidas = selecionadas; 
+            mostrarToast("Lojas vinculadas na nuvem!", "sucesso"); 
+            fecharModalEdicao(); 
+            if (document.getElementById('modal-gerenciar-equipe').classList.contains('ativa')) renderizarModalEquipe(); 
+        } catch(e) { 
+            console.error(e); 
+            mostrarToast("Erro ao vincular lojas.", "erro"); 
+        } 
+    }; 
+    
+    document.getElementById('modal-edicao').classList.add('ativo'); loadIcons(); 
 }
 
 window.adminAddMarcaConcorrente = function() { document.getElementById('input-nova-marca').value = ""; document.getElementById('modal-nova-marca').classList.add('ativo'); loadIcons(); };
 window.fecharModalNovaMarca = function() { document.getElementById('modal-nova-marca').classList.remove('ativo'); };
-window.confirmarNovaMarca = function() { let selSup = document.getElementById('seletor-foco-sup').value; let novaMarca = document.getElementById('input-nova-marca').value.trim(); if (!novaMarca) return mostrarToast("Digite o nome da marca.", "alerta"); if (!valoresComissao[selSup]) valoresComissao[selSup] = {}; if (!valoresComissao[selSup].marcas_concorrentes) valoresComissao[selSup].marcas_concorrentes = ["Samsung", "Motorola", "Outros"]; valoresComissao[selSup].marcas_concorrentes.push(novaMarca); if (typeof renderizarInputsFoco === "function") renderizarInputsFoco(); if (typeof atualizarListaPremiumGlobal === "function") atualizarListaPremiumGlobal(); mostrarToast("Marca adicionada! Clique em 'Salvar' no topo.", "sucesso"); fecharModalNovaMarca(); };
-window.adminRemoverMarcaConcorrente = function(idx) { let selSup = document.getElementById('seletor-foco-sup').value; if (valoresComissao[selSup] && valoresComissao[selSup].marcas_concorrentes) { valoresComissao[selSup].marcas_concorrentes.splice(idx, 1); if (typeof renderizarInputsFoco === "function") renderizarInputsFoco(); if (typeof atualizarListaPremiumGlobal === "function") atualizarListaPremiumGlobal(); } };
-
-async function abrirBatalha() { mudarTela('tela-batalha'); const grid = document.getElementById('grid-batalha-aparelhos'); if (!grid) return; let html = ""; for (let ap in mapaEmojis) { html += `<div class="item-aparelho" onclick="carregarCardTatico('${ap}')" style="cursor: pointer;"><div class="card-aparelho" style="width: 75px; height: 75px;"><span class="emoji-card" style="font-size: 32px;">${mapaEmojis[ap]}</span></div><span class="nome-card" style="font-size: 11px;">${ap.toUpperCase()}</span></div>`; } grid.innerHTML = html || "<div class='mensagem-vazia'>Nenhum aparelho cadastrado.</div>"; document.getElementById('card-tatico-detalhe').style.display = "none"; loadIcons(); }
-async function carregarCardTatico(aparelhoNome) { mostrarToast(`Buscando táticas para ${aparelhoNome.toUpperCase()}...`, "info"); let supId = usuarioLogado.criadoPor || "geral"; if (usuarioLogado.cargo === "supervisor") supId = usuarioLogado.id; if (usuarioLogado.cargo === "gestor" || usuarioLogado.id === "master") supId = "geral"; try { const { data } = await supabaseClient.from('catalogo_batalha').select('*').eq('supervisor_login', supId).eq('aparelho_chave', aparelhoNome.toLowerCase()).single(); let argumentos = "Nenhum argumento cadastrado pelo supervisor para este aparelho ainda."; let contra = "Nenhum contra-ataque cadastrado."; let pdfUrl = ""; if (data) { argumentos = data.argumentos || argumentos; contra = data.contra_ataque || contra; pdfUrl = data.pdf_url || ""; } document.getElementById('batalha-titulo-aparelho').innerHTML = `${mapaEmojis[aparelhoNome] || ''} ${aparelhoNome.toUpperCase()}`; document.getElementById('batalha-texto-argumentos').innerText = argumentos; document.getElementById('batalha-texto-contra').innerText = contra; let containerPdf = document.getElementById('container-pdf-batalha'); if (pdfUrl) { document.getElementById('link-pdf-batalha').href = pdfUrl; containerPdf.style.display = "block"; } else { containerPdf.style.display = "none"; } document.getElementById('card-tatico-detalhe').style.display = "block"; loadIcons(); } catch (e) { console.error("Erro ao carregar card tático:", e); document.getElementById('batalha-titulo-aparelho').innerHTML = `${mapaEmojis[aparelhoNome] || ''} ${aparelhoNome.toUpperCase()}`; document.getElementById('batalha-texto-argumentos').innerText = "Cadastre os argumentos na aba Ajustes."; document.getElementById('batalha-texto-contra').innerText = "Cadastre os contra-ataques na aba Ajustes."; document.getElementById('container-pdf-batalha').style.display = "none"; document.getElementById('card-tatico-detalhe').style.display = "block"; loadIcons(); } }
-
-function abrirModalFechamento() { let selLoja = document.getElementById('select-loja-share'); let htmlLojas = ''; let lojas = []; if (usuarioLogado.cargo === "promotor") { lojas = usuarioLogado.lojasPermitidas || []; if (typeof lojas === 'string') { try { lojas = JSON.parse(lojas); } catch(e) { lojas = [lojas]; } } } else if (usuarioLogado.cargo === "supervisor" && typeof getLojasDaRegiao === "function") { lojas = getLojasDaRegiao(usuarioLogado.id); } else { lojas = Object.keys(lojasConfig); } if (!lojas || lojas.length === 0) return mostrarToast("Nenhuma loja encontrada na sua região.", "alerta"); lojas.sort().forEach(l => { let nomePromotor = getPromotorDaLoja(l); htmlLojas += `<option value="${l}">${l} (👤 ${nomePromotor})</option>`; }); selLoja.innerHTML = htmlLojas; let supId = usuarioLogado.criadoPor || "geral"; if (usuarioLogado.cargo === "supervisor") supId = usuarioLogado.id; let vComissao = valoresComissao[supId] || valoresComissao["geral"] || {}; let marcas = vComissao.marcas_concorrentes || ["Samsung", "Motorola", "Outros"]; let containerMarcas = document.getElementById('container-inputs-concorrencia'); let htmlInputs = ""; marcas.forEach((marca, idx) => { htmlInputs += `<div><span style="font-size: 11px; font-weight: bold; color: var(--cor-secundaria);">${marca}</span><input type="number" id="input-concorrente-${idx}" data-marca="${marca}" placeholder="Qtd" style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); text-align: center; margin: 0;"></div>`; }); if (containerMarcas) containerMarcas.innerHTML = htmlInputs; document.getElementById('modal-fechamento-share').classList.add('ativo'); loadIcons(); }
-async function enviarFechamentoShare() { if (!navigator.onLine) { mostrarToast("Sem internet!", "erro"); return; } let loja = document.getElementById('select-loja-share').value; if (!loja) return mostrarToast("Selecione uma loja.", "alerta"); let totalConcorrencia = 0; let objConcorrentes = {}; let inputs = document.querySelectorAll('[id^="input-concorrente-"]'); inputs.forEach(inp => { let qtd = parseInt(inp.value) || 0; let marca = inp.getAttribute('data-marca'); objConcorrentes[marca] = qtd; totalConcorrencia += qtd; }); if (totalConcorrencia === 0) return mostrarToast("Preencha as vendas da concorrência.", "alerta"); const btn = document.getElementById("btn-salvar-share"); btn.disabled = true; btn.innerHTML = '<i data-lucide="loader-2" style="animation: spin 1s linear infinite;"></i> Salvando...'; loadIcons(); let payload = { data_fechamento: new Date().toISOString().split('T')[0], loja: loja, promotor_login: usuarioLogado.id, vendas_oppo: 0, vendas_total_loja: totalConcorrencia, criado_por_supervisor: usuarioLogado.criadoPor || usuarioLogado.id, concorrentes_dados: objConcorrentes }; try { const { error } = await supabaseClient.from('market_share').insert([payload]); if (error) throw error; mostrarToast("Fechamento registrado com sucesso!", "sucesso"); document.getElementById('modal-fechamento-share').classList.remove('ativo'); } catch (e) { console.error("Erro no Share:", e); mostrarToast("Erro ao registrar fechamento.", "erro"); } finally { btn.disabled = false; btn.innerHTML = 'Salvar Fechamento'; loadIcons(); } }
-
-function exportarParaCSV(nomeArquivo, dados, colunas) { if (dados.length === 0) return mostrarToast("Nenhum dado para exportar", "alerta"); let csvContent = "data:text/csv;charset=utf-8,\uFEFF"; csvContent += colunas.join(";") + "\r\n"; dados.forEach(row => { let linha = colunas.map(col => { let info = row[col] ? String(row[col]).replace(/;/g, ",") : ""; return `${info}`; }); csvContent += linha.join(";") + "\r\n"; }); const encodedUri = encodeURI(csvContent); const link = document.createElement("a"); link.setAttribute("href", encodedUri); link.setAttribute("download", `${nomeArquivo}_${new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')}.csv`); document.body.appendChild(link); link.click(); document.body.removeChild(link); mostrarToast("Download iniciado!", "sucesso"); }
-function baixarRelatorioAcomp() { if (typeof dadosAcompanhamentoGlobal === 'undefined' || dadosAcompanhamentoGlobal.length === 0) { return mostrarToast("Carregue os dados primeiro.", "alerta"); } exportarParaCSV("Acompanhamento_Vendas", dadosAcompanhamentoGlobal, ["Data", "Vendedor", "Aparelhos", "Status"]); }
-function baixarRelatorioHistorico() { if (typeof dadosHistoricoGlobal === 'undefined' || dadosHistoricoGlobal.length === 0) { return mostrarToast("Carregue o histórico primeiro.", "alerta"); } let dadosLimpos = dadosHistoricoGlobal.map(item => ({ Data: item.Data, Tipo: item.Tipo, Status: item.Status, Promotor: item.Promotor, Detalhe: item.Detalhe.replace(/<[^>]*>?/gm, '') })); exportarParaCSV("Historico_Auditoria", dadosLimpos, ["Data", "Tipo", "Status", "Promotor", "Detalhe"]); }
+window.confirmarNovaMarca = function() { let selSup = document.getElementById('seletor-foco-sup').value; let novaMarca = document.getElementById('input-nova-marca').value.trim(); if (!novaMarca) return mostrarToast("Digite o nome da marca.", "alerta"); if (!valoresComissao[selSup]) valoresComissao[selSup] = {}; if (!valoresComissao[selSup].marcas_concorrentes) valoresComissao[selSup].marcas_concorrentes = ["Samsung", "Motorola", "Outros"]; valoresComissao[selSup].marcas_concorrentes.push(novaMarca); if (typeof renderizarInputsFoco === "function") renderizarInputsFoco(); if (typeof atualizarListaPremiumGlobal === "function") atualizarListaPremiumGlobal(); mostrarToast("Marca adicionada na nuvem!", "sucesso"); fecharModalNovaMarca(); };
+window.adminRemoverMarcaConcorrente = function(idx) { let selSup = document.getElementById('seletor-foco-sup').value; if (valoresComissao[selSup] && valoresComissao[selSup].marcas_concorrentes) { valoresComissao[selSup].marcas_concorrentes.splice(idx, 1); if (typeof renderizarInputsFoco === "function") renderizarInputsFoco(); if (typeof atualizarListaPremiumGlobal === "function") atualizarListaPremiumGlobal(); mostrarToast("Marca removida da nuvem!", "info"); } };
