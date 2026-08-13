@@ -196,10 +196,22 @@ function switchTab(tabId, groupClass) {
 }
 
 // ==========================================
-// PULL TO REFRESH
+// PULL TO REFRESH E CORREÇÃO DE SCROLL MOBILE
 // ==========================================
 let ptrStartY = 0; let ptrCurrentY = 0; let isPulling = false;
-document.addEventListener('touchstart', e => { if (window.scrollY === 0 || document.documentElement.scrollTop === 0) { ptrStartY = e.touches[0].clientY; isPulling = true; } }, { passive: true });
+
+document.addEventListener('touchstart', e => { 
+    // TRAVA DE SEGURANÇA: Desativa o pull-to-refresh dentro de modais, menus e telas com scroll interno (como Ajustes e Histórico)
+    if (e.target.closest('.modal-overlay, .admin-tab-content, .dash-tab-content, .equipe-tab-content, [style*="overflow"]')) {
+        isPulling = false;
+        return;
+    }
+    if (window.scrollY === 0 || document.documentElement.scrollTop === 0) { 
+        ptrStartY = e.touches[0].clientY; 
+        isPulling = true; 
+    } 
+}, { passive: true });
+
 document.addEventListener('touchmove', e => {
     if (!isPulling) return;
     let currentY = e.touches[0].clientY; let diffY = currentY - ptrStartY;
@@ -223,6 +235,12 @@ document.addEventListener('touchmove', e => {
 document.addEventListener('touchend', e => {
     if (!isPulling) return; isPulling = false; let diffY = ptrCurrentY - ptrStartY; let ptr = document.getElementById('ptr-indicator');
     if (ptr && diffY > 90) { ptr.classList.add('refreshing'); ptr.style.top = '40px'; executarRefreshTelaAtual(); setTimeout(() => { ptr.style.top = '-60px'; ptr.classList.remove('refreshing'); setTimeout(() => ptr.remove(), 300); }, 1500); } else if (ptr) { ptr.style.top = '-60px'; setTimeout(() => ptr.remove(), 300); }
+    ptrStartY = 0; ptrCurrentY = 0;
+});
+
+document.addEventListener('touchcancel', e => {
+    if (!isPulling) return; isPulling = false; let ptr = document.getElementById('ptr-indicator');
+    if (ptr) { ptr.style.top = '-60px'; setTimeout(() => ptr.remove(), 300); }
     ptrStartY = 0; ptrCurrentY = 0;
 });
 

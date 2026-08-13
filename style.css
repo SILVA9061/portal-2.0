@@ -399,3 +399,15 @@ body.dark-mode .logo-rodape-login { filter: invert(1) brightness(2); opacity: 0.
     }
     .container.login-mode-desktop .header-global { display: none !important; }
 }
+/* ==========================================
+   CORREÇÃO: BLOQUEIO DA SIDEBAR NO MOBILE E FLUIDEZ
+========================================== */
+@media (max-width: 1023px) {
+    #sidebar-desktop {
+        display: none !important;
+    }
+}
+
+* {
+    -webkit-overflow-scrolling: touch;
+}
